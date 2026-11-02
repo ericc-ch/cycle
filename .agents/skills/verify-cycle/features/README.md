@@ -8,6 +8,7 @@ The unit suite (`nub run test`) drives `update` and the rendered text through `f
 | [Logging flow](flow-logging.md)                      | `localStorage` round trip and reload                      | `flow`     | deterministic |
 | [Tabs and prediction switch](tabs-and-prediction.md) | the switch's submodel and cross-tab effects               | `tabs`     | deterministic |
 | [Overlays](overlays.md)                              | native `<dialog>`, portal, focus, Escape, hover delay     | `overlays` | deterministic |
+| [Mobile layout](mobile-layout.md)                    | `position: fixed`, media queries, touch-target sizes      | `mobile`   | deterministic |
 
 `deterministic` means it passed at least three consecutive runs on this machine, from a cold profile, with the exact commands in `SKILL.md`.
 

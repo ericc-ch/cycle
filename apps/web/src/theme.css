@@ -41,7 +41,7 @@ body {
   background: var(--bg-0);
   color: var(--fg-0);
   font-family: var(--font-sans);
-  font-size: clamp(0.95rem, 0.9326rem + 0.087vw, 1rem);
+  font-size: clamp(1rem, 0.9783rem + 0.087vw, 1.05rem);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }

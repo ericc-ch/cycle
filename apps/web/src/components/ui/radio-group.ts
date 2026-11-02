@@ -3,25 +3,36 @@ import type { Html, HtmlBuilder } from 'foldkit/html'
 import type { OptionInfo, RenderInfo } from '@foldkit/ui/radioGroup'
 import * as stylex from '@stylexjs/stylex'
 
-import { font, palette, space, typeScale } from '../../tokens.stylex.js'
+import { font, palette, size, space, typeScale } from '../../tokens.stylex.js'
 
 export * from '@foldkit/ui/radioGroup'
 
 const styles = stylex.create({
+  /* One row of equal cells, each a full touch target. No box, no fill: the
+   *  label is the control, as everywhere else in this design. */
   group: {
     display: 'flex',
-    flexWrap: 'wrap',
-    gap: space.lg,
+    width: '100%',
+    '@media (min-width: 48rem)': {
+      gap: space.lg,
+    },
   },
   item: {
     appearance: 'none',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minHeight: size.tap,
+    paddingInline: space.xs,
     fontFamily: font.sans,
     fontSize: typeScale.base,
     lineHeight: 1.5,
     color: palette.fg1,
     backgroundColor: 'transparent',
     borderWidth: 0,
-    padding: 0,
     cursor: 'pointer',
     textDecorationLine: 'none',
     ':hover': { color: palette.fg0 },
@@ -29,7 +40,13 @@ const styles = stylex.create({
       outlineWidth: '2px',
       outlineStyle: 'solid',
       outlineColor: palette.fg0,
-      outlineOffset: '2px',
+      outlineOffset: '-2px',
+    },
+    '@media (min-width: 48rem)': {
+      flexGrow: 0,
+      flexBasis: 'auto',
+      paddingInline: 0,
+      ':focus-visible': { outlineOffset: '2px' },
     },
   },
   itemChecked: {

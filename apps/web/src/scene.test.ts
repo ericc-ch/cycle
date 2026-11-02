@@ -52,13 +52,13 @@ describe('view', () => {
       expect(role('status')).toContainText('Day 18'),
       expect(role('status')).toContainText('Period expected'),
       expect(role('status')).toContainText('–'),
-      expect(role('radio', { name: 'None' })).toHaveAttr(
+      expect(role('radio', { name: 'Spotting' })).toHaveAttr(
         'data-slot',
         'radio-group-item',
       ),
-      expect(role('radio', { name: 'None' })).toHaveAttr(
+      expect(role('radio', { name: 'Spotting' })).toHaveAttr(
         'data-state',
-        'checked',
+        'unchecked',
       ),
     )
   })
@@ -83,7 +83,7 @@ describe('view', () => {
     scene(
       { update, view },
       given(baseModel),
-      keydown(role('radio', { name: 'None' }), 'ArrowRight'),
+      keydown(role('radio', { name: 'Spotting' }), 'ArrowRight'),
       Command.resolve(
         RadioGroup.FocusOption,
         RadioGroup.Message.CompletedFocusOption(),
@@ -91,10 +91,10 @@ describe('view', () => {
       Command.resolve(
         SaveLogs,
         Message.SucceededSaveLogs({
-          logs: [...twoPeriods, { date: TODAY, flow: 'Spotting' as const }],
+          logs: [...twoPeriods, { date: TODAY, flow: 'Light' as const }],
         }),
       ),
-      expect(role('radio', { name: 'Spotting' })).toBeChecked(),
+      expect(role('radio', { name: 'Light' })).toBeChecked(),
     )
   })
 

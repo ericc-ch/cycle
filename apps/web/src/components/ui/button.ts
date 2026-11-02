@@ -16,6 +16,7 @@ const styles = stylex.create({
     borderWidth: 0,
     padding: 0,
     cursor: 'pointer',
+    textAlign: 'start',
     textDecorationLine: 'underline',
     textDecorationThickness: '1px',
     textUnderlineOffset: '0.18em',

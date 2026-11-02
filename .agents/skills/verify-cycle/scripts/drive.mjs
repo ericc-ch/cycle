@@ -72,7 +72,6 @@ const flows = {
         (node.textContent ?? '').trim() === text ||
         node.getAttribute('aria-label') === text)
       const controls = [
-        ['Data menu', '[data-slot="dropdown-menu-trigger"]'],
         ['Today tab', '[data-slot="tabs-trigger"]', 'Today'],
         ['History tab', '[data-slot="tabs-trigger"]', 'History'],
         ['About tab', '[data-slot="tabs-trigger"]', 'About'],
@@ -156,7 +155,7 @@ const flows = {
     must(
       flow,
       'nothing logged before the first tap',
-      checked === 'None',
+      checked === null,
       String(checked),
     )
 
@@ -195,7 +194,14 @@ const flows = {
       await statusText(browser),
     )
 
-    await browser.click('[role="radio"]', 'None')
+    const clearVisible = await browser.evaluate(`(() =>
+      [...document.querySelectorAll('[data-slot="button"]')].some(
+        node => node.textContent.trim() === 'Clear this day',
+      )
+    )()`)
+    must(flow, 'a logged day offers to clear itself', clearVisible)
+
+    await browser.click('[data-slot="button"]', 'Clear this day')
     await browser.waitFor(
       `(document.querySelector('[role="status"]')?.innerText ?? '').includes('Nothing logged')`,
       { label: 'status to return to empty' },
@@ -276,15 +282,13 @@ const flows = {
     const flow = 'overlays'
     await seed(browser, twoPeriods)
 
-    await browser.click('[data-slot="dropdown-menu-trigger"]')
+    await browser.click('[data-slot="tabs-trigger"]', 'About')
     await browser.waitFor(
-      `document.querySelectorAll('[role="menuitem"]').length === 2`,
-      { label: 'Data menu items' },
+      `document.body.innerText.includes('Everything stays on this device')`,
+      { label: 'About panel' },
     )
-    must(flow, 'the Data menu lists both actions', true)
-    await browser.screenshot(join(outDir, 'overlays-menu.png'))
 
-    await browser.click('[role="menuitem"]', 'How this works')
+    await browser.click('[data-slot="button"]', 'How the range is calculated')
     await browser.waitFor(`document.querySelector('dialog[open]') !== null`, {
       label: 'explainer dialog to open',
     })
@@ -311,6 +315,30 @@ const flows = {
       'the closed dialog leaves the page clickable',
       !tab.covered,
       tab.hit ?? '',
+    )
+
+    await browser.click('[data-slot="button"]', 'Clear all data')
+    await browser.waitFor(`document.querySelector('dialog[open]') !== null`, {
+      label: 'clear dialog to open',
+    })
+    const clearTitle = await browser.evaluate(
+      `document.querySelector('dialog[open] [data-slot="dialog-title"]')?.textContent ?? null`,
+    )
+    must(
+      flow,
+      'About opens the clear dialog',
+      clearTitle === 'Clear all data?',
+      String(clearTitle),
+    )
+    await browser.escape()
+    await browser.waitFor(`document.querySelector('dialog[open]') === null`, {
+      label: 'Escape to close the clear dialog',
+    })
+
+    await browser.click('[data-slot="tabs-trigger"]', 'Today')
+    await browser.waitFor(
+      `document.querySelector('[data-slot="popover-trigger"]') !== null`,
+      { label: 'Today panel' },
     )
 
     await browser.click('[data-slot="popover-trigger"]')
@@ -370,6 +398,93 @@ const flows = {
     must(flow, 'the tooltip hides when the pointer leaves', true)
 
     await browser.screenshot(join(outDir, 'overlays-final.png'))
+  },
+
+  async mobile(browser) {
+    const flow = 'mobile'
+    await browser.viewport({
+      width: 390,
+      height: 844,
+      mobile: true,
+      deviceScaleFactor: 2,
+    })
+    await seed(browser, twoPeriods)
+
+    const layout = await browser.evaluate(`(() => {
+      const bar = document.querySelector('[data-slot="tabs-list"]').parentElement
+      const rect = bar.getBoundingClientRect()
+      const items = [...document.querySelectorAll('[data-slot="tabs-trigger"]')].map(node => {
+        const box = node.getBoundingClientRect()
+        return {
+          label: node.textContent.trim(),
+          width: Math.round(box.width),
+          height: Math.round(box.height),
+        }
+      })
+      const page = document.querySelector('main').parentElement
+      return {
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+        scrollWidth: document.documentElement.scrollWidth,
+        bar: {
+          top: Math.round(rect.top),
+          bottom: Math.round(rect.bottom),
+          position: getComputedStyle(bar).position,
+        },
+        items,
+        pagePaddingBottom: Math.round(parseFloat(getComputedStyle(page).paddingBottom)),
+      }
+    })()`)
+
+    must(
+      flow,
+      'the emulated screen is a phone',
+      layout.innerWidth === 390,
+      String(layout.innerWidth),
+    )
+    must(
+      flow,
+      'the bar is pinned to the bottom edge',
+      layout.bar.position === 'fixed' &&
+        Math.abs(layout.bar.bottom - layout.innerHeight) <= 1,
+      JSON.stringify(layout.bar),
+    )
+    must(
+      flow,
+      'no horizontal scroll',
+      layout.scrollWidth === layout.innerWidth,
+      `${layout.scrollWidth} vs ${layout.innerWidth}`,
+    )
+    for (const item of layout.items) {
+      must(
+        flow,
+        `the ${item.label} tab is at least 44px each way`,
+        item.height >= 44 && item.width >= 44,
+        `${item.width}x${item.height}`,
+      )
+    }
+    must(
+      flow,
+      'the page leaves room for the bar',
+      layout.pagePaddingBottom >= layout.innerHeight - layout.bar.top,
+      `${layout.pagePaddingBottom}px`,
+    )
+
+    await browser.click('[data-slot="tabs-trigger"]', 'History')
+    await browser.waitFor(`document.body.innerText.includes('Periods')`, {
+      label: 'History panel from the bottom bar',
+    })
+    must(flow, 'the bottom bar switches panels', true)
+    await browser.screenshot(join(outDir, 'mobile-history.png'))
+
+    await browser.click('[data-slot="tabs-trigger"]', 'Today')
+    await browser.waitFor(
+      `document.querySelector('[data-slot="calendar-day"]') !== null`,
+      { label: 'Today panel' },
+    )
+    await browser.screenshot(join(outDir, 'mobile-today.png'))
+
+    await browser.viewport({ width: 1280, height: 800 })
   },
 }
 

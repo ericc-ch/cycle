@@ -2,7 +2,7 @@ import { Option } from 'effect'
 import { Command, given, message, model, story } from 'foldkit/story'
 import { describe, expect, test } from 'vitest'
 
-import { Calendar, Menu, Tabs } from './components/ui'
+import { Calendar, Tabs } from './components/ui'
 import { Message, type Model, SaveLogs, init, update } from './main'
 
 const TODAY = '2026-10-20'
@@ -49,7 +49,6 @@ describe('init', () => {
 
     expect(result.model.aboutDialog.isOpen).toBe(false)
     expect(result.model.clearDialog.isOpen).toBe(false)
-    expect(result.model.menu.isOpen).toBe(false)
     expect(result.model.legend.isOpen).toBe(false)
     expect(result.model.tooltip.isOpen).toBe(false)
   })
@@ -173,13 +172,8 @@ describe('update', () => {
     expect(result.model.aboutDialog.isOpen).toBe(true)
   })
 
-  test('the menu selection opens the matching dialog', () => {
-    const result = update(
-      baseModel,
-      Message.GotMenuMessage({
-        message: Menu.Message.SelectedItem({ index: 1, item: 'clear' }),
-      }),
-    )
+  test('OpenedClear opens the clear dialog on its own', () => {
+    const result = update(baseModel, Message.OpenedClear())
 
     expect(result.model.clearDialog.isOpen).toBe(true)
     expect(result.model.aboutDialog.isOpen).toBe(false)

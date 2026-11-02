@@ -14,7 +14,7 @@ deterministic
 
 ## How to get to it (user POV)
 
-The three words under the masthead. Tap History to see past periods, About for the switch and the explanation.
+The three words in the bar at the bottom of a phone screen, or the row under `cycle` on a wide window. Tap History to see past periods, About for the switch and the explanation.
 
 ## Driving it with the CDP harness
 
@@ -29,6 +29,7 @@ Click `[data-slot="tabs-trigger"]` by text. The active tab carries `data-state="
 
 - The tab panel renders only the active tab (`PanelMount.ActiveOnly`), so a selector scoped to another tab's content will find nothing rather than hidden content.
 - Clicking a tab dispatches a `FocusTab` command before the app folds the selection. In a scene test that command has to be resolved; in the browser it is not observable.
+- On a phone the bar is `position: fixed`; its height and pinned position are asserted by the `mobile` flow, not here.
 - `isPredicting` is not stored. A reload resets it, so an assertion that it is still `off` is a bug in the test, not the app.
 - History with no logs shows `Nothing logged yet.`; assert `Periods` only after logging a day.
 

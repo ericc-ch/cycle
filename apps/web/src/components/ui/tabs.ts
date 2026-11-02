@@ -3,22 +3,36 @@ import type { Html, HtmlBuilder } from 'foldkit/html'
 import type { RenderInfo, TabInfo } from '@foldkit/ui/tabs'
 import * as stylex from '@stylexjs/stylex'
 
-import { font, palette, space, typeScale } from '../../tokens.stylex.js'
+import { font, palette, size, space, typeScale } from '../../tokens.stylex.js'
 
 export * from '@foldkit/ui/tabs'
 
 const styles = stylex.create({
+  /* Mobile first: three equal cells that fill the width of the bottom bar.
+   *  The bar itself is positioned by the app; this is only the row. */
   list: {
     display: 'flex',
-    flexWrap: 'wrap',
-    gap: space.lg,
-    borderBottomWidth: '1px',
-    borderBottomStyle: 'solid',
-    borderBottomColor: palette.line,
-    paddingBottom: space.sm,
+    width: '100%',
+    maxWidth: '50ch',
+    marginInline: 'auto',
+    '@media (min-width: 48rem)': {
+      gap: space.lg,
+      flexWrap: 'wrap',
+      borderBottomWidth: '1px',
+      borderBottomStyle: 'solid',
+      borderBottomColor: palette.line,
+      paddingBottom: space.sm,
+    },
   },
   trigger: {
     appearance: 'none',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minHeight: size.bar,
     fontFamily: font.sans,
     fontSize: typeScale.base,
     lineHeight: 1.5,
@@ -33,7 +47,13 @@ const styles = stylex.create({
       outlineWidth: '2px',
       outlineStyle: 'solid',
       outlineColor: palette.fg0,
-      outlineOffset: '2px',
+      outlineOffset: '-2px',
+    },
+    '@media (min-width: 48rem)': {
+      flexGrow: 0,
+      flexBasis: 'auto',
+      minHeight: 0,
+      ':focus-visible': { outlineOffset: '2px' },
     },
   },
   triggerSelected: {

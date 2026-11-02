@@ -35,12 +35,16 @@ node .agents/skills/verify-cycle/scripts/drive.mjs
 
 ### UI rules
 
-- Components come from `@foldkit/ui`. Do not hand-write a component the library ships. Its submodels (Tabs, RadioGroup, Menu, Popover, Tooltip, Dialog) own their own open/closed, active-item and focus state.
+- Components come from `@foldkit/ui`. Do not hand-write a component the library ships. Its submodels (Calendar, Tabs, RadioGroup, Popover, Tooltip, Dialog, Menu) own their own open/closed, active-item and focus state.
 - Stateful components are submodels: put their `Model` in the app `Model`, embed with `h.submodel` (a unique `slotId` per rendered position), and drive them through `Update.foldChild`. Lift their `OutMessage` to app state in `foldOutMessage`; do not mirror their state in app booleans.
 - `apps/web/src/components/ui` is a copy-owned styled layer, not a package. Each module re-exports the headless module and adds a `render`/`renderConfig` that takes the library's `RenderInfo`. Styles never live at the call site; app-level layout is a local StyleX block in `apps/web/src/main.ts`.
 - StyleX needs a `*.stylex.js` file for shared values, and those values must come from `stylex.defineVars`/`defineConsts`. Bare imported scalars are rejected, so write them inline.
 - Read `apps/web/src/components/ui/README.md` before adding a renderer.
 - No radius, no shadow, no animation, no accent colour. Flow is encoded in ink levels, and state is written in words.
+- Mobile first: base styles are the phone, and `@media (min-width: 48rem)` is where a layout relaxes for a wide window. The section nav is a fixed bottom bar on a phone and the inline row above the panel on desktop; both branches are the same DOM. `Tabs.list` owns the row, `styles.nav` in `main.ts` owns the bar.
+- Anything tappable is at least 44px in one dimension (`size.tap`), and labels are one word. The nav is text only; no icons, no pill, no fill.
+- The page reserves the bar's height plus `env(safe-area-inset-bottom)`; the bar reserves the same inset. `viewport-fit=cover` in `index.html` is what makes those insets non-zero.
+- Controls are typed, not filled: a selected tab, flow level or day is full ink plus an underline/border, never a background.
 
 ### Foldkit reference
 

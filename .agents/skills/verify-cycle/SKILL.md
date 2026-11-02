@@ -59,18 +59,21 @@ node .agents/skills/verify-cycle/scripts/drive.mjs clicks     # one flow
 
 Flows live in `scripts/drive.mjs` and map to `features/*.md`:
 
-| Flow       | What it proves                                                                                                  |
-| ---------- | --------------------------------------------------------------------------------------------------------------- |
-| `clicks`   | every visible control receives its own click; no overlay steals input                                           |
-| `flow`     | pick a day, log flow, status changes, survives reload, clear it                                                 |
-| `tabs`     | Today/History/About switch panels; the prediction switch reaches the status                                     |
-| `overlays` | Data menu opens the explainer dialog and Escape closes it; legend popover and confidence tooltip open and close |
+| Flow       | What it proves                                                                                        |
+| ---------- | ----------------------------------------------------------------------------------------------------- |
+| `clicks`   | every visible control receives its own click; no overlay steals input                                 |
+| `flow`     | pick a day, log flow, status changes, survives reload, clear it                                       |
+| `tabs`     | Today/History/About switch panels; the prediction switch reaches the status                           |
+| `overlays` | About opens the explainer and clear dialogs and Escape closes them; legend and tooltip open and close |
+| `mobile`   | at 390x844 the bar is fixed to the bottom, every tab is 44px, nothing scrolls sideways                |
 
 Each run prints a line per check and exits non-zero on the first failed flow. Screenshots and `report.json` land in `.audit/evidence/<run-id>/`.
 
-Selectors are stable handles, not coordinates: `[data-slot="tabs-trigger"]`, `[data-slot="calendar-day"]` for day cells (the cell wrapper carries `data-today`), `[role="radio"]`, `[role="menuitem"]`, `[data-slot="dialog-content"]`, `[role="status"]`.
+Selectors are stable handles, not coordinates: `[data-slot="tabs-trigger"]`, `[data-slot="calendar-day"]` for day cells (the cell wrapper carries `data-today`), `[role="radio"]`, `[data-slot="button"]` with its text, `[data-slot="dialog-content"]`, `[role="status"]`.
 
 Hover and keyboard are real input events (`Input.dispatchMouseEvent`, `Input.dispatchKeyEvent`), not `element.click()`, so pointer and Escape paths are exercised.
+
+Screens are emulated with `browser.viewport({ width, height, mobile })`, which sends `Emulation.setDeviceMetricsOverride` and toggles touch. Chrome's headless default is 1280x800, so anything that should only happen on a phone needs the override.
 
 ## 4. Evidence
 

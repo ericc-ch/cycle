@@ -49,7 +49,6 @@ try {
   }
 
   const controls = [
-    ['Data menu', '[data-slot="dropdown-menu-trigger"]'],
     ['Today tab', '[data-slot="tabs-trigger"]', 'Today'],
     ['History tab', '[data-slot="tabs-trigger"]', 'History'],
     ['calendar day', '[data-slot="calendar-cell"][data-today] button'],

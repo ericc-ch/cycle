@@ -38,14 +38,13 @@ import {
   Button,
   Calendar,
   Dialog,
-  Menu,
   Popover,
   RadioGroup,
   Switch,
   Tabs,
   Tooltip,
 } from './components/ui'
-import { font, palette, space, typeScale } from './tokens.stylex.js'
+import { font, palette, size, space, typeScale } from './tokens.stylex.js'
 
 const LOGS_STORAGE_KEY = 'cycle.logs'
 const CALENDAR_ID = 'cycle-calendar'
@@ -53,28 +52,22 @@ const TABS_ID = 'cycle-tabs'
 const FLOW_ID = 'flow'
 const TOOLTIP_ID = 'confidence'
 const LEGEND_ID = 'legend'
-const DATA_MENU_ID = 'data-menu'
 const ABOUT_DIALOG_ID = 'about-dialog'
 const CLEAR_DIALOG_ID = 'clear-dialog'
 const PREDICTION_SWITCH_ID = 'prediction'
 
 type Tab = 'Today' | 'History' | 'About'
-type FlowChoice = 'None' | Flow
-type DataItem = 'about' | 'clear'
 
 const tabs: ReadonlyArray<Tab> = ['Today', 'History', 'About']
-const flowChoices: ReadonlyArray<FlowChoice> = [
-  'None',
+const flowChoices: ReadonlyArray<Flow> = [
   'Spotting',
   'Light',
   'Medium',
   'Heavy',
 ]
-const dataItems: ReadonlyArray<DataItem> = ['about', 'clear']
 
 const CycleTabs = Tabs.create<Tab>()
-const FlowGroup = RadioGroup.create<FlowChoice>()
-const DataMenu = Menu.create<DataItem>()
+const FlowGroup = RadioGroup.create<Flow>()
 
 // MODEL
 
@@ -94,7 +87,6 @@ export const Model = Schema.Struct({
   flow: RadioGroup.Model,
   tooltip: Tooltip.Model,
   legend: Popover.Model,
-  menu: Menu.Model,
   aboutDialog: Dialog.Model,
   clearDialog: Dialog.Model,
 })
@@ -111,13 +103,13 @@ export const Message = defineMessageUnion({
   SetPrediction: { isPredicting: Schema.Boolean },
   ClearedAllLogs: {},
   OpenedAbout: {},
+  OpenedClear: {},
 
   GotCalendarMessage: { message: Calendar.Message },
   GotTabsMessage: { message: Tabs.Message },
   GotFlowMessage: { message: RadioGroup.Message },
   GotTooltipMessage: { message: Tooltip.Message },
   GotLegendMessage: { message: Popover.Message },
-  GotMenuMessage: { message: Menu.Message },
   GotAboutDialogMessage: { message: Dialog.Message },
   GotClearDialogMessage: { message: Dialog.Message },
 })
@@ -158,7 +150,6 @@ export const init: Runtime.ApplicationInit<Model, Message, Flags> = flags => ({
     flow: RadioGroup.init({ id: FLOW_ID }),
     tooltip: Tooltip.init({ id: TOOLTIP_ID }),
     legend: Popover.init({ id: LEGEND_ID }),
-    menu: Menu.init({ id: DATA_MENU_ID }),
     aboutDialog: Dialog.init({ id: ABOUT_DIALOG_ID }),
     clearDialog: Dialog.init({ id: CLEAR_DIALOG_ID }),
   },
@@ -241,14 +232,12 @@ const foldTabsOutMessage = Tabs.OutMessage.match<
 
 const foldFlowOutMessage = RadioGroup.OutMessage.match<
   UpdateStep,
-  RadioGroup.OutMessage<FlowChoice>
+  RadioGroup.OutMessage<Flow>
 >({
   Selected:
     ({ value }) =>
     model =>
-      value === 'None'
-        ? clearDay(model, model.selectedDate)
-        : logFlow(model, model.selectedDate, value),
+      logFlow(model, model.selectedDate, value),
 })
 
 const foldTooltipOutMessage = Tooltip.OutMessage.match<UpdateStep>({
@@ -349,26 +338,6 @@ const foldClearDialogClose = Update.foldChildStep({
   foldOutMessage: foldDialogOutMessage,
 })
 
-const foldMenuOutMessage = Menu.OutMessage.match<
-  UpdateStep,
-  Menu.OutMessage<DataItem>
->({
-  Selected:
-    ({ value }) =>
-    model =>
-      value === 'about'
-        ? foldAboutDialogOpen(model)
-        : foldClearDialogOpen(model),
-})
-
-const foldMenu = Update.foldChild({
-  update: DataMenu.update,
-  read: (model: Model) => Option.some(model.menu),
-  write: (model, nextMenu) => modifyFields(model, { menu: () => nextMenu }),
-  toParentMessage: message => Message.GotMenuMessage({ message }),
-  foldOutMessage: foldMenuOutMessage,
-})
-
 export const update = (model: Model, message: Message) =>
   Message.match<UpdateReturn>(message, {
     LoggedFlow: ({ date, flow }) => logFlow(model, date, flow),
@@ -398,12 +367,13 @@ export const update = (model: Model, message: Message) =>
 
     OpenedAbout: () => foldAboutDialogOpen(model),
 
+    OpenedClear: () => foldClearDialogOpen(model),
+
     GotCalendarMessage: ({ message }) => foldCalendar(model, message),
     GotTabsMessage: ({ message }) => foldTabs(model, message),
     GotFlowMessage: ({ message }) => foldFlow(model, message),
     GotTooltipMessage: ({ message }) => foldTooltip(model, message),
     GotLegendMessage: ({ message }) => foldLegend(model, message),
-    GotMenuMessage: ({ message }) => foldMenu(model, message),
     GotAboutDialogMessage: ({ message }) => foldAboutDialog(model, message),
     GotClearDialogMessage: ({ message }) => foldClearDialog(model, message),
   })
@@ -432,8 +402,40 @@ const styles = stylex.create({
     minHeight: '100dvh',
     display: 'flex',
     justifyContent: 'center',
-    paddingBlock: space.huge,
-    paddingInline: space.xl,
+    // Mobile: clear the fixed bar (56px of items, 32px of air) and the
+    // home-indicator inset. Desktop: the bar is back in the flow, so plain
+    // generous padding.
+    paddingBlockStart: space.xxl,
+    paddingBlockEnd: 'calc(88px + env(safe-area-inset-bottom))',
+    paddingInlineStart: 'max(20px, env(safe-area-inset-left))',
+    paddingInlineEnd: 'max(20px, env(safe-area-inset-right))',
+    '@media (min-width: 48rem)': {
+      paddingBlock: space.huge,
+      paddingInline: space.xl,
+    },
+  },
+  nav: {
+    position: 'fixed',
+    insetInlineStart: 0,
+    insetInlineEnd: 0,
+    bottom: 0,
+    zIndex: 10,
+    backgroundColor: palette.bg0,
+    borderTopWidth: '1px',
+    borderTopStyle: 'solid',
+    borderTopColor: palette.line,
+    paddingInlineStart: 'max(20px, env(safe-area-inset-left))',
+    paddingInlineEnd: 'max(20px, env(safe-area-inset-right))',
+    paddingBottom: 'env(safe-area-inset-bottom)',
+    '@media (min-width: 48rem)': {
+      position: 'static',
+      zIndex: 0,
+      backgroundColor: 'transparent',
+      borderTopWidth: 0,
+      paddingInlineStart: 0,
+      paddingInlineEnd: 0,
+      paddingBottom: 0,
+    },
   },
   column: {
     width: '100%',
@@ -471,6 +473,25 @@ const styles = stylex.create({
   quiet: {
     color: palette.fg1,
     fontSize: typeScale.sm,
+  },
+  rowAction: {
+    display: 'flex',
+    alignItems: 'center',
+    minHeight: size.tap,
+  },
+  rule: {
+    width: '100%',
+    margin: 0,
+    borderWidth: 0,
+    borderTopWidth: '1px',
+    borderTopStyle: 'solid',
+    borderTopColor: palette.line,
+  },
+  dataBlock: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: space.sm,
   },
   mark: {
     width: '16px',
@@ -610,10 +631,7 @@ const confidenceHint = (confidence: string): string =>
     Match.orElse(() => 'A range, not a promise.'),
   )
 
-const dataMenuLabel = (item: DataItem): string =>
-  item === 'about' ? 'How this works' : 'Clear all data'
-
-const mastheadView = (model: Model, h: HtmlBuilder<Message>): Html =>
+const mastheadView = (h: HtmlBuilder<Message>): Html =>
   h.div(
     [h.Attribute('class', stylex.attrs(styles.masthead).class ?? '')],
     [
@@ -621,20 +639,6 @@ const mastheadView = (model: Model, h: HtmlBuilder<Message>): Html =>
         [h.Attribute('class', stylex.attrs(styles.wordmark).class ?? '')],
         ['cycle'],
       ),
-      h.submodel({
-        slotId: DATA_MENU_ID,
-        model: model.menu,
-        view: DataMenu.view,
-        viewInputs: Menu.renderConfig<DataItem, Message>(
-          {
-            items: dataItems,
-            label: dataMenuLabel,
-            trigger: 'Data',
-          },
-          h,
-        ),
-        toParentMessage: message => Message.GotMenuMessage({ message }),
-      }),
     ],
   )
 
@@ -851,10 +855,6 @@ const calendarView = (model: Model, h: HtmlBuilder<Message>): Html =>
 const flowEditorView = (model: Model, h: HtmlBuilder<Message>): Html => {
   const maybeSelected = parseDayNumber(model.selectedDate)
   const currentFlow = flowOn(model.logs, model.selectedDate)
-  const choice: FlowChoice = Option.match(currentFlow, {
-    onNone: () => 'None',
-    onSome: flow => flow,
-  })
 
   return Option.match(maybeSelected, {
     onNone: () => h.empty,
@@ -893,12 +893,35 @@ const flowEditorView = (model: Model, h: HtmlBuilder<Message>): Html => {
             view: FlowGroup.view,
             viewInputs: {
               options: flowChoices,
-              selectedValue: Option.some(choice),
+              selectedValue: currentFlow,
               ariaLabel: 'Flow',
               orientation: 'Horizontal',
               toView: info => RadioGroup.render(info, value => value, h),
             },
             toParentMessage: message => Message.GotFlowMessage({ message }),
+          }),
+          Option.match(currentFlow, {
+            onNone: () => h.empty,
+            onSome: () =>
+              h.div(
+                [
+                  h.Attribute(
+                    'class',
+                    stylex.attrs(styles.rowAction).class ?? '',
+                  ),
+                ],
+                [
+                  Button.render(
+                    {
+                      label: 'Clear this day',
+                      onClick: Message.ClearedDay({ date: model.selectedDate }),
+                      variant: 'ghost',
+                      size: 'sm',
+                    },
+                    h,
+                  ),
+                ],
+              ),
           }),
         ],
       ),
@@ -1117,6 +1140,26 @@ const aboutView = (model: Model, h: HtmlBuilder<Message>): Html =>
         },
         h,
       ),
+      h.hr([h.Attribute('class', stylex.attrs(styles.rule).class ?? '')]),
+      h.div(
+        [h.Attribute('class', stylex.attrs(styles.dataBlock).class ?? '')],
+        [
+          h.p(
+            [h.Attribute('class', stylex.attrs(styles.quiet).class ?? '')],
+            [
+              `${plural(model.logs.length, 'day', 'days')} logged on this device.`,
+            ],
+          ),
+          Button.render(
+            {
+              label: 'Clear all data',
+              onClick: Message.OpenedClear(),
+              variant: 'ghost',
+            },
+            h,
+          ),
+        ],
+      ),
     ],
   )
 
@@ -1150,7 +1193,10 @@ const tabsView = (
         h.div(
           [h.DataAttribute('slot', 'tabs')],
           [
-            Tabs.list(info, h),
+            h.div(
+              [h.Attribute('class', stylex.attrs(styles.nav).class ?? '')],
+              [Tabs.list(info, h)],
+            ),
             ...Array.map(
               Array.filter(info.tabs, tab => tab.index === info.activeIndex),
               tab =>
@@ -1254,7 +1300,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => {
       h.main(
         [h.Attribute('class', stylex.attrs(styles.column).class ?? '')],
         [
-          mastheadView(model, h),
+          mastheadView(h),
           tabsView(model, periods, h),
           aboutDialogView(model, h),
           clearDialogView(model, h),

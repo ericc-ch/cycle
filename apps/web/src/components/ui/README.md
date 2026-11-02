@@ -17,12 +17,18 @@ The structure follows shadcn's component API where the two model concepts line u
 | `TooltipTrigger` / `TooltipContent`                                                                                 | `Tooltip.trigger` / `Tooltip.content` (`Tooltip.render` composes both)                                                                            |
 | `PopoverTrigger` / `PopoverContent`                                                                                 | `Popover.trigger` / `Popover.content` (`Popover.render` composes both)                                                                            |
 | `Dialog` / `DialogOverlay` / `DialogContent` / `DialogTitle` / `DialogDescription` / `DialogFooter` / `DialogClose` | `Dialog.root` / `Dialog.content` / `Dialog.title` / `Dialog.description` / `Dialog.footer` / `Dialog.closeButton` (`Dialog.render` composes them) |
-| `DropdownMenuTrigger` / `DropdownMenuContent` / `DropdownMenuItem`                                                  | `Menu.renderConfig` marks those parts with `data-slot`, because `@foldkit/ui`'s Menu owns its markup                                              |
+| `DropdownMenuTrigger` / `DropdownMenuContent` / `DropdownMenuItem`                                                  | `Menu.renderConfig` marks those parts with `data-slot`, because `@foldkit/ui`'s Menu owns its markup (shipped, not currently used by the app)     |
 | `Calendar`                                                                                                          | `Calendar.render` (month view; the app passes a `decoration` for the flow mark under each day)                                                    |
 
 `data-slot` values match shadcn's names (`button`, `tabs-list`, `tabs-trigger`, `tabs-content`, `dialog-content`, `dialog-overlay`, `dialog-title`, `dialog-description`, `dialog-footer`, `dialog-close`, `dropdown-menu-trigger`, `dropdown-menu-content`, `dropdown-menu-item`, `popover-trigger`, `popover-content`, `tooltip-trigger`, `tooltip-content`, `radio-group`, `radio-group-item`, `switch`, `switch-thumb`, `switch-label`). The calendar has no shadcn parts to copy, so its handles are `calendar`, `calendar-previous-month`, `calendar-next-month`, `calendar-grid`, `calendar-cell` and `calendar-day`. `data-state` / `data-variant` / `data-size` follow shadcn's conventions, and the scene tests assert a few of them so they cannot silently disappear.
 
 A closed native `<dialog>` must stay `display: none`. The UA sheet hides it, but any author `display` overrides that, and the component's inline `width/height: 100%` then turns the closed element into a full-page sheet that swallows every click. `Dialog.root` applies its grid only while `isVisible`; do not put a `display` on the base dialog class. The `clicks` flow and the doctor check this.
+
+## Mobile first
+
+Base styles are the phone. `Tabs.list` is a row of three equal cells that fills the width of the bottom bar; at `48rem` it goes back to the inline row with a rule under it. `RadioGroup` items are equal cells with a 44px minimum height on a phone and shrink to their text on a wide window. The bar's fixed position, background and safe-area padding are page layout, so they live in `src/main.ts`, not here.
+
+Anything tappable is at least `size.tap` (44px) in one dimension and, where labels are short, both. WCAG 2.5.8 only asks for 24px; 44 is what a thumb hits.
 
 ## Where this deliberately differs
 

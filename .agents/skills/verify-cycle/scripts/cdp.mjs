@@ -258,6 +258,26 @@ export const launch = async ({ port = 9333 } = {}) => {
     writeFileSync(path, Buffer.from(shot.result.data, 'base64'))
   }
 
+  // Resize the emulated screen. `mobile: true` makes the meta viewport
+  // apply, so CSS px match the device width instead of a 980px layout.
+  const viewport = async ({
+    width,
+    height,
+    mobile = false,
+    deviceScaleFactor = 1,
+  }) => {
+    await session('Emulation.setDeviceMetricsOverride', {
+      width,
+      height,
+      mobile,
+      deviceScaleFactor,
+      screenWidth: width,
+      screenHeight: height,
+    })
+    await session('Emulation.setTouchEmulationEnabled', { enabled: mobile })
+    await new Promise(resolve => setTimeout(resolve, 200))
+  }
+
   const consoleMessages = () =>
     events
       .filter(
@@ -315,6 +335,7 @@ export const launch = async ({ port = 9333 } = {}) => {
     press,
     escape,
     screenshot,
+    viewport,
     consoleMessages,
     close,
   }
