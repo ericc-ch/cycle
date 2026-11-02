@@ -86,4 +86,3 @@ Monochrome and typographic, borrowed from [my site](https://github.com/ericc-ch/
 There is no accent colour. Flow is encoded in ink: spotting is a hairline, light and medium are mid greys, heavy is full foreground. State lives in text, never in colour alone.
 
 Component behaviour is hand-written against the React Aria and Base UI contracts, and recorded in `packages/ui/NOTICE`.
-

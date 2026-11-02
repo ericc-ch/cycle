@@ -7,4 +7,7 @@ export * as Tabs from './tabs'
 export * as ToggleGroup from './toggle-group'
 export * as Tooltip from './tooltip'
 
-export { font, palette, space, typeScale } from './tokens.stylex.js'
+// Tokens are not re-exported here on purpose. StyleX only inlines an import
+// whose specifier ends in `.stylex.js`, so consumers deep-import
+// `@cycle/ui/src/tokens.stylex.js`. Going through this barrel fails with
+// "Could not resolve the path to the imported file".

@@ -6,16 +6,16 @@ Styling is StyleX. Values come from `src/tokens.stylex.js`, which maps the desig
 
 ## What is here
 
-| Component     | Semantics                          | Keyboard                                                |
-| ------------- | ---------------------------------- | ------------------------------------------------------- |
-| `Button`      | native `button`, variants          | Enter, Space                                            |
-| `ToggleGroup` | `radiogroup` + `radio`             | arrows move and select, Home/End, roving tabindex        |
-| `Tabs`        | `tablist` + `tab` + `tabpanel`     | arrows move and select, Home/End, roving tabindex        |
-| `Switch`      | `switch` with `aria-checked`       | Enter, Space                                            |
-| `Tooltip`     | `role="tooltip"` + `aria-describedby` | shows on hover and focus, Escape hides               |
-| `Popover`     | `aria-expanded`/`aria-controls`    | Escape closes, outside click closes, focus moves in      |
-| `Menu`        | `menu` + `menuitem`                | arrows, Home/End, Enter/Space select, Escape/Tab close   |
-| `Dialog`      | `role="dialog"`, `aria-modal`      | Escape closes, scrim click closes, focus moves in        |
+| Component     | Semantics                             | Keyboard                                               |
+| ------------- | ------------------------------------- | ------------------------------------------------------ |
+| `Button`      | native `button`, variants             | Enter, Space                                           |
+| `ToggleGroup` | `radiogroup` + `radio`                | arrows move and select, Home/End, roving tabindex      |
+| `Tabs`        | `tablist` + `tab` + `tabpanel`        | arrows move and select, Home/End, roving tabindex      |
+| `Switch`      | `switch` with `aria-checked`          | Enter, Space                                           |
+| `Tooltip`     | `role="tooltip"` + `aria-describedby` | shows on hover and focus, Escape hides                 |
+| `Popover`     | `aria-expanded`/`aria-controls`       | Escape closes, outside click closes, focus moves in    |
+| `Menu`        | `menu` + `menuitem`                   | arrows, Home/End, Enter/Space select, Escape/Tab close |
+| `Dialog`      | `role="dialog"`, `aria-modal`         | Escape closes, scrim click closes, focus moves in      |
 
 Every component is a plain function: `view(props, h) => Html`. There is no submodel, no state machine and no hidden state. The app owns the open/closed flag, the selected index and the message to dispatch, which keeps the whole interaction testable from `story` and `scene` tests.
 
@@ -43,7 +43,7 @@ These are known and not bugs:
 
 Three rules that StyleX enforces, learned the hard way:
 
-1. Shared style values must live in `src/tokens.stylex.js`. Any other name is rejected with `Could not resolve the path to the imported file`.
+1. Shared style values must live in `src/tokens.stylex.js`, and the import specifier must end in `.stylex.js`. `import { palette } from '@cycle/ui'` is rejected with `Could not resolve the path to the imported file`; `import { palette } from '@cycle/ui/src/tokens.stylex.js'` works. That is why `index.ts` does not re-export the tokens.
 2. A file that only exports constants is not transformed, so those constants have to come from `stylex.defineVars` (or `defineConsts`) for StyleX to inline them.
 3. A bare imported scalar (`import { lineHeight }`) fails with `A style value can only contain an array, string or number`. Member access on an imported object (`palette.fg0`) and inline literals both work, so scalars are written inline and shared values live in a vars group.
 

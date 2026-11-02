@@ -32,7 +32,6 @@ After any change, run `nub run check` (typecheck, vitest, lint including the Eff
 - Read `packages/ui/README.md` before adding a component; it lists the keyboard/ARIA contract and the deliberate gaps.
 - No radius, no shadow, no animation, no accent colour. Flow is encoded in ink levels, and state is written in words.
 
-
 ### Foldkit reference
 
 The live Foldkit source is not vendored into this repo. A shallow clone of the matching release lives at `/tmp/references/foldkit` (`foldkit@0.170.0`), alongside `examples/` and `packages/foldkit/src/`. Treat it as read-only reference; imports always come from the `foldkit` npm package. Re-clone it after upgrading Foldkit:

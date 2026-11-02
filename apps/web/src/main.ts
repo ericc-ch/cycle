@@ -40,52 +40,9 @@ import {
   ToggleGroup,
   Tooltip,
 } from '@cycle/ui'
+import { font, palette, space, typeScale } from '@cycle/ui/src/tokens.stylex.js'
 import { BrowserKeyValueStore } from '@effect/platform-browser'
 import * as stylex from '@stylexjs/stylex'
-
-// CONSTANT
-
-const palette = {
-  bg0: 'var(--bg-0)',
-  bg1: 'var(--bg-1)',
-  bg2: 'var(--bg-2)',
-  fg0: 'var(--fg-0)',
-  fg1: 'var(--fg-1)',
-  fg2: 'var(--fg-2)',
-  line: 'var(--line)',
-  halo: 'var(--halo)',
-} as const
-
-const font = {
-  sans: 'var(--font-sans)',
-  mono: 'var(--font-mono)',
-} as const
-
-const typeScale = {
-  sm: '0.875rem',
-  base: 'clamp(0.95rem, 0.9326rem + 0.087vw, 1rem)',
-  lg: 'clamp(1.30625rem, 1.2823rem + 0.1196vw, 1.375rem)',
-  xl: 'clamp(1.425rem, 1.3989rem + 0.1304vw, 1.5rem)',
-  xxl: 'clamp(1.6625rem, 1.6321rem + 0.1522vw, 1.75rem)',
-  xxxl: 'clamp(2.1rem, 1.85rem + 1.25vw, 3rem)',
-} as const
-
-const space = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-  xxl: 24,
-  huge: 48,
-} as const
-
-const outline = {
-  outlineWidth: '2px',
-  outlineStyle: 'solid',
-  outlineColor: palette.fg0,
-  outlineOffset: '2px',
-} as const
 
 const LOGS_STORAGE_KEY = 'cycle.logs'
 const DAYS_SHOWN = 14
@@ -352,21 +309,21 @@ const styles = stylex.create({
     minHeight: '100dvh',
     display: 'flex',
     justifyContent: 'center',
-    paddingBlock: `${space.huge}px`,
-    paddingInline: `${space.xl}px`,
+    paddingBlock: space.huge,
+    paddingInline: space.xl,
   },
   column: {
     width: '100%',
     maxWidth: '50ch',
     display: 'flex',
     flexDirection: 'column',
-    gap: `${space.xxl}px`,
+    gap: space.xxl,
   },
   masthead: {
     display: 'flex',
     alignItems: 'baseline',
     justifyContent: 'space-between',
-    gap: `${space.lg}px`,
+    gap: space.lg,
   },
   wordmark: {
     fontSize: typeScale.lg,
@@ -376,7 +333,7 @@ const styles = stylex.create({
   status: {
     display: 'flex',
     flexDirection: 'column',
-    gap: `${space.xs}px`,
+    gap: space.xs,
   },
   day: {
     fontFamily: font.mono,
@@ -395,14 +352,14 @@ const styles = stylex.create({
   grid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(7, 1fr)',
-    gap: `${space.xs}px`,
+    gap: space.xs,
   },
   cell: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: `${space.xs}px`,
+    gap: space.xs,
     minHeight: '48px',
     borderWidth: '1px',
     borderStyle: 'solid',
@@ -410,7 +367,12 @@ const styles = stylex.create({
     backgroundColor: 'transparent',
     cursor: 'pointer',
     padding: 0,
-    ':focus-visible': outline,
+    ':focus-visible': {
+      outlineWidth: '2px',
+      outlineStyle: 'solid',
+      outlineColor: palette.fg0,
+      outlineOffset: '2px',
+    },
   },
   cellSelected: {
     borderColor: palette.fg0,
@@ -436,13 +398,13 @@ const styles = stylex.create({
   section: {
     display: 'flex',
     flexDirection: 'column',
-    gap: `${space.md}px`,
+    gap: space.md,
   },
   sectionHead: {
     display: 'flex',
     alignItems: 'baseline',
     justifyContent: 'space-between',
-    gap: `${space.md}px`,
+    gap: space.md,
     color: palette.fg1,
     fontSize: typeScale.sm,
   },
@@ -454,7 +416,7 @@ const styles = stylex.create({
   rows: {
     display: 'flex',
     flexDirection: 'column',
-    gap: `${space.sm}px`,
+    gap: space.sm,
     margin: 0,
     padding: 0,
     listStyle: 'none',
@@ -462,7 +424,7 @@ const styles = stylex.create({
   row: {
     display: 'grid',
     gridTemplateColumns: '1fr auto',
-    gap: `${space.lg}px`,
+    gap: space.lg,
     alignItems: 'baseline',
   },
   rowMeta: {
@@ -474,7 +436,7 @@ const styles = stylex.create({
   prose: {
     display: 'flex',
     flexDirection: 'column',
-    gap: `${space.md}px`,
+    gap: space.md,
     color: palette.fg1,
   },
   strong: {
@@ -483,22 +445,22 @@ const styles = stylex.create({
   legend: {
     display: 'flex',
     flexDirection: 'column',
-    gap: `${space.sm}px`,
+    gap: space.sm,
   },
   legendRow: {
     display: 'grid',
     gridTemplateColumns: '16px 1fr',
-    gap: `${space.md}px`,
+    gap: space.md,
     alignItems: 'center',
   },
   alert: {
     borderWidth: '1px',
     borderStyle: 'solid',
     borderColor: palette.line,
-    padding: `${space.md}px`,
+    padding: space.md,
     display: 'flex',
     flexDirection: 'column',
-    gap: `${space.sm}px`,
+    gap: space.sm,
   },
 })
 
