@@ -1,16 +1,33 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
+    "target": "ESNext",
     "module": "ESNext",
-    "lib": ["ES2022", "DOM"],
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "moduleResolution": "bundler",
+    "moduleDetection": "force",
     "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "skipLibCheck": true,
-    "esModuleInterop": true,
+    "allowJs": true,
     "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true,
     "isolatedModules": true,
-    "noEmit": true
+    "allowImportingTsExtensions": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["node"],
+    "paths": {
+      "@cycle/domain": ["./packages/domain/src/index.ts"],
+      "@cycle/ui": ["./packages/ui/src/index.ts"]
+    }
   },
-  "include": ["src/**/*"]
+  "include": [
+    "apps/**/*.ts",
+    "packages/**/*.ts",
+    "vitest-setup.ts",
+    "vitest.config.ts"
+  ]
 }

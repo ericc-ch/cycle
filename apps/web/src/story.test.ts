@@ -1,6 +1,5 @@
 import { Option } from 'effect'
 import { Command, given, message, model, story } from 'foldkit/story'
-import { modifyFields } from 'foldkit/struct'
 import { describe, expect, test } from 'vitest'
 
 import { Message, type Model, SaveLogs, init, update } from './main'
@@ -19,11 +18,19 @@ const octoberPeriod = [
   { date: '2026-10-05', flow: 'Light' as const },
 ]
 
-const modelWithTwoPeriods: Model = {
+const baseModel: Model = {
   logs: [...septemberPeriod, ...octoberPeriod],
   today: TODAY,
   selectedDate: TODAY,
   acknowledgedLateOn: Option.none(),
+  tab: 'Today',
+  isPredicting: true,
+  isTooltipOpen: false,
+  isLegendOpen: false,
+  isMenuOpen: false,
+  menuIndex: -1,
+  isAboutOpen: false,
+  isClearOpen: false,
 }
 
 describe('init', () => {
@@ -36,6 +43,8 @@ describe('init', () => {
     expect(result.model.logs).toStrictEqual(octoberPeriod)
     expect(result.model.today).toBe(TODAY)
     expect(result.model.selectedDate).toBe(TODAY)
+    expect(result.model.tab).toBe('Today')
+    expect(result.model.isPredicting).toBe(true)
   })
 
   test('starts empty when nothing was stored', () => {
@@ -49,7 +58,7 @@ describe('update', () => {
   test('SelectedDay moves the editor to that day', () => {
     story(
       update,
-      given(modelWithTwoPeriods),
+      given(baseModel),
       message(Message.SelectedDay({ date: '2026-10-06' })),
       model(model => {
         expect(model.selectedDate).toBe('2026-10-06')
@@ -67,7 +76,7 @@ describe('update', () => {
 
     story(
       update,
-      given(modelWithTwoPeriods),
+      given(baseModel),
       message(Message.LoggedFlow({ date: TODAY, flow: 'Medium' })),
       Command.expectExact(SaveLogs),
       Command.resolve(
@@ -90,7 +99,7 @@ describe('update', () => {
 
     story(
       update,
-      given(modelWithTwoPeriods),
+      given(baseModel),
       message(Message.LoggedFlow({ date: '2026-10-03', flow: 'Light' })),
       Command.expectExact(SaveLogs),
       Command.resolve(
@@ -108,7 +117,7 @@ describe('update', () => {
 
     story(
       update,
-      given(modelWithTwoPeriods),
+      given(baseModel),
       message(Message.ClearedDay({ date: '2026-10-03' })),
       Command.expectExact(SaveLogs),
       Command.resolve(
@@ -124,7 +133,7 @@ describe('update', () => {
   test('AcknowledgedLate records the day without saving', () => {
     story(
       update,
-      given(modelWithTwoPeriods),
+      given(baseModel),
       message(Message.AcknowledgedLate({ date: TODAY })),
       model(model => {
         expect(model.acknowledgedLateOn).toStrictEqual(Option.some(TODAY))
@@ -133,12 +142,64 @@ describe('update', () => {
     )
   })
 
+  test('SelectedTab changes the section and closes transient panels', () => {
+    story(
+      update,
+      given({ ...baseModel, isLegendOpen: true, isMenuOpen: true }),
+      message(Message.SelectedTab({ tab: 'History' })),
+      model(model => {
+        expect(model.tab).toBe('History')
+        expect(model.isLegendOpen).toBe(false)
+        expect(model.isMenuOpen).toBe(false)
+      }),
+      Command.expectNone(),
+    )
+  })
+
+  test('ToggledPrediction flips the prediction switch', () => {
+    story(
+      update,
+      given(baseModel),
+      message(Message.ToggledPrediction()),
+      model(model => {
+        expect(model.isPredicting).toBe(false)
+      }),
+      Command.expectNone(),
+    )
+  })
+
+  test('the menu opens on index zero and moves with the keyboard', () => {
+    story(
+      update,
+      given(baseModel),
+      message(Message.OpenedMenu()),
+      message(Message.MovedMenuIndex({ index: 1 })),
+      model(model => {
+        expect(model.isMenuOpen).toBe(true)
+        expect(model.menuIndex).toBe(1)
+      }),
+      Command.expectNone(),
+    )
+  })
+
+  test('ClearedAllLogs empties the logs and saves', () => {
+    story(
+      update,
+      given({ ...baseModel, isClearOpen: true }),
+      message(Message.ClearedAllLogs()),
+      Command.expectExact(SaveLogs),
+      Command.resolve(SaveLogs, Message.SucceededSaveLogs({ logs: [] })),
+      model(model => {
+        expect(model.logs).toStrictEqual([])
+        expect(model.isClearOpen).toBe(false)
+      }),
+    )
+  })
+
   test('FailedSaveLogs keeps the in-memory logs', () => {
     story(
       update,
-      given(
-        modifyFields(modelWithTwoPeriods, { logs: () => [...octoberPeriod] }),
-      ),
+      given({ ...baseModel, logs: [...octoberPeriod] }),
       message(Message.LoggedFlow({ date: TODAY, flow: 'Heavy' })),
       Command.expectExact(SaveLogs),
       Command.resolve(SaveLogs, Message.FailedSaveLogs()),

@@ -1,6 +1,6 @@
 import { Array, Option } from 'effect'
 
-import { type Forecast, forecast, median } from '../domain/predict'
+import { type Forecast, forecast, median } from '../predict'
 
 export type Band = {
   readonly low: number

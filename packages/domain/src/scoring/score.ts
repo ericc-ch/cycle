@@ -2,7 +2,7 @@ import { Array, Console, Effect, FileSystem, Option, pipe } from 'effect'
 
 import { NodeRuntime, NodeServices } from '@effect/platform-node'
 
-import { median } from '../domain/predict'
+import { median } from '../predict'
 import {
   type CycleRow,
   type TrainingPair,

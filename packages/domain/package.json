@@ -1,0 +1,14 @@
+{
+  "name": "@cycle/domain",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "dependencies": {
+    "effect": "4.1.0",
+    "foldkit": "0.170.0"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "4.1.0"
+  }
+}

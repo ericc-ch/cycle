@@ -26,7 +26,7 @@ Not in scope, on purpose: ovulation, fertile windows, contraception claims, acco
 
 ## The prediction
 
-`src/domain/predict.ts`. No training, no model file. Roughly:
+`packages/domain/src/predict.ts`. No training, no model file. Roughly:
 
 1. Cycle lengths are the gaps between period starts, keeping 15–90 days and dropping the rest as mis-entries.
 2. With 6 or more cycles, the centre is the median of the last 6. Fewer than 3 uses her own mean pulled toward a 29 day prior; 3 to 5 uses the median but with an inflated spread.
@@ -71,11 +71,19 @@ Underneath, the interesting number is what happens while a cycle is open: at the
 ## Layout
 
 ```
-src/main.ts            Model, Message, update, view, SaveLogs
-src/entry.ts           runtime boot
-src/domain/date.ts     date keys and day arithmetic (UTC, no timezones)
-src/domain/period.ts   flow levels, period grouping, cycle lengths
-src/domain/predict.ts  estimator, truncated-normal forecast, cycle state
-src/scoring/           dataset parsing, predictors, report, CLI
-scripts/               dataset download
+apps/web/              the Vite app: runtime boot, Model/Message/update/view
+apps/web/src/theme.css design tokens: light-dark() colours, fonts, base styles
+packages/domain/       date keys, period grouping, predictor, scoring
+packages/ui/           StyleX components ported to Foldkit (see its README)
 ```
+
+`packages/domain` has no Foldkit or DOM dependency, so the scoring CLI and the app run the exact same estimator.
+
+## The look
+
+Monochrome and typographic, borrowed from [my site](https://github.com/ericc-ch/ericc-ch.github.io) (`docs/DESIGN.md`): `light-dark()` tokens, Plus Jakarta Sans with JetBrains Mono for dates, a fluid type ladder, a 4px grid, a 50ch measure, no radius, no shadow, no motion.
+
+There is no accent colour. Flow is encoded in ink: spotting is a hairline, light and medium are mid greys, heavy is full foreground. State lives in text, never in colour alone.
+
+Component behaviour is hand-written against the React Aria and Base UI contracts, and recorded in `packages/ui/NOTICE`.
+

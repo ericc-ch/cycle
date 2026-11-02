@@ -1,13 +1,25 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 
+import stylex from '@stylexjs/unplugin'
+
+const rootDir = fileURLToPath(new URL('.', import.meta.url))
+
 export default defineConfig({
+  plugins: [
+    stylex.vite({
+      dev: true,
+      runtimeInjection: true,
+      unstable_moduleResolution: { type: 'commonJS', rootDir },
+    }),
+  ],
   test: {
-    include: ['src/**/*.{test,spec}.ts'],
+    include: ['apps/**/*.test.ts', 'packages/**/*.test.ts'],
     environment: 'happy-dom',
-    setupFiles: ['./src/vitest-setup.ts'],
+    setupFiles: ['./vitest-setup.ts'],
     server: {
       deps: {
-        inline: ['foldkit', '@foldkit/ui', '@foldkit/devtools'],
+        inline: ['foldkit', '@cycle/ui', '@cycle/domain'],
       },
     },
   },
