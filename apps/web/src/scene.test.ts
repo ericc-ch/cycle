@@ -11,8 +11,7 @@ import {
 } from 'foldkit/scene'
 import { describe, test } from 'vitest'
 
-import { RadioGroup, Tabs } from '@cycle/ui'
-
+import { RadioGroup, Tabs } from './components/ui'
 import { Message, type Model, SaveLogs, init, update, view } from './main'
 
 const TODAY = '2026-10-20'

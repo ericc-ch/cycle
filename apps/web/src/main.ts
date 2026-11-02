@@ -30,6 +30,9 @@ import {
   stateFor,
   weekdayLabel,
 } from '@cycle/domain'
+import { BrowserKeyValueStore } from '@effect/platform-browser'
+import * as stylex from '@stylexjs/stylex'
+
 import {
   Button,
   Dialog,
@@ -39,10 +42,8 @@ import {
   Switch,
   Tabs,
   Tooltip,
-} from '@cycle/ui'
-import { font, palette, space, typeScale } from '@cycle/ui/src/tokens.stylex.js'
-import { BrowserKeyValueStore } from '@effect/platform-browser'
-import * as stylex from '@stylexjs/stylex'
+} from './components/ui'
+import { font, palette, space, typeScale } from './tokens.stylex.js'
 
 const LOGS_STORAGE_KEY = 'cycle.logs'
 const DAYS_SHOWN = 14

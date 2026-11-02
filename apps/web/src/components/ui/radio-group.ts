@@ -3,7 +3,7 @@ import type { Html, HtmlBuilder } from 'foldkit/html'
 import type { RenderInfo } from '@foldkit/ui/radioGroup'
 import * as stylex from '@stylexjs/stylex'
 
-import { font, palette, space, typeScale } from './tokens.stylex.js'
+import { font, palette, space, typeScale } from '../../tokens.stylex.js'
 
 export * from '@foldkit/ui/radioGroup'
 

@@ -20,7 +20,7 @@ After any change, run `nub run check` (typecheck, vitest, lint including the Eff
 
 ### Layout
 
-`apps/web` is the Vite app. `packages/domain` is date maths, period grouping, the predictor and the scoring harness; it has no Foldkit or DOM import, which is what lets the CLI and the app share it. `packages/ui` styles `@foldkit/ui` components with StyleX.
+`apps/web` is the Vite app. Its styled components live in `apps/web/src/components/ui`, copied into the app in the shadcn style rather than kept in a workspace package. `packages/domain` is date maths, period grouping, the predictor and the scoring harness; it has no Foldkit or DOM import, which is what lets the CLI and the app share it.
 
 `vitest` runs one root config over `apps/**` and `packages/**`, with the StyleX plugin inlined. StyleX's plugin leaks a 150ms interval into the vitest worker, so the run prints `something prevents 2 Vite servers from exiting` and waits ten seconds before closing. Tests have already passed at that point.
 
@@ -28,10 +28,9 @@ After any change, run `nub run check` (typecheck, vitest, lint including the Eff
 
 - Components come from `@foldkit/ui`. Do not hand-write a component the library ships. Its submodels (Tabs, RadioGroup, Menu, Popover, Tooltip, Dialog) own their own open/closed, active-item and focus state.
 - Stateful components are submodels: put their `Model` in the app `Model`, embed with `h.submodel` (a unique `slotId` per rendered position), and drive them through `Update.foldChild`. Lift their `OutMessage` to app state in `foldOutMessage`; do not mirror their state in app booleans.
-- `packages/ui` is the styled layer only. Each module re-exports the headless module and adds a `render`/`renderConfig` that takes the library's `RenderInfo`. Styles never live at the call site; app-level layout is a local StyleX block in `apps/web/src/main.ts`.
+- `apps/web/src/components/ui` is a copy-owned styled layer, not a package. Each module re-exports the headless module and adds a `render`/`renderConfig` that takes the library's `RenderInfo`. Styles never live at the call site; app-level layout is a local StyleX block in `apps/web/src/main.ts`.
 - StyleX needs a `*.stylex.js` file for shared values, and those values must come from `stylex.defineVars`/`defineConsts`. Bare imported scalars are rejected, so write them inline.
-- Both Vite configs set `resolve.dedupe` for `foldkit`, `@foldkit/ui` and `effect`. Without it the workspaces load two Foldkit copies and every render throws `foldkit was loaded as more than one instance`.
-- Read `packages/ui/README.md` before adding a renderer.
+- Read `apps/web/src/components/ui/README.md` before adding a renderer.
 - No radius, no shadow, no animation, no accent colour. Flow is encoded in ink levels, and state is written in words.
 
 ### Foldkit reference

@@ -20,8 +20,7 @@
     "noEmit": true,
     "types": ["node"],
     "paths": {
-      "@cycle/domain": ["./packages/domain/src/index.ts"],
-      "@cycle/ui": ["./packages/ui/src/index.ts"]
+      "@cycle/domain": ["./packages/domain/src/index.ts"]
     }
   },
   "include": [

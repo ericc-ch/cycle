@@ -2,8 +2,7 @@ import { Option } from 'effect'
 import { Command, given, message, model, story } from 'foldkit/story'
 import { describe, expect, test } from 'vitest'
 
-import { Menu, Tabs } from '@cycle/ui'
-
+import { Menu, Tabs } from './components/ui'
 import { Message, type Model, SaveLogs, init, update } from './main'
 
 const TODAY = '2026-10-20'

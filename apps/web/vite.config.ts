@@ -18,12 +18,7 @@ export default defineConfig({
   ],
   optimizeDeps: {
     entries: ['src/entry.ts'],
-    exclude: ['@cycle/ui', '@cycle/domain'],
-  },
-  resolve: {
-    // @cycle/ui has its own node_modules, so without this the app would bundle
-    // two copies of foldkit and the scene harness would reject the second.
-    dedupe: ['foldkit', '@foldkit/ui', 'effect'],
+    exclude: ['@cycle/domain'],
   },
   server: {
     host: '127.0.0.1',
