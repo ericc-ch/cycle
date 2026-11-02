@@ -8,10 +8,17 @@ import { font, palette, space, typeScale } from '../../tokens.stylex.js'
 export * from '@foldkit/ui/dialog'
 
 const styles = stylex.create({
+  // A closed native dialog must stay `display: none`. The UA rule that hides it
+  // is overridden by any author `display`, and with the component's inline
+  // `width/height: 100%` a visible closed dialog becomes a full-screen sheet
+  // that swallows every click. So the layout is opt-in via `isVisible`.
   dialog: {
+    display: 'none',
+    padding: space.lg,
+  },
+  dialogOpen: {
     display: 'grid',
     placeItems: 'center',
-    padding: space.lg,
   },
   overlay: {
     position: 'absolute',
@@ -88,7 +95,11 @@ export const root = <Message>(
       ...info.dialog,
       h.DataAttribute('slot', 'dialog'),
       h.DataAttribute('state', info.isVisible ? 'open' : 'closed'),
-      h.Attribute('class', stylex.attrs(styles.dialog).class ?? ''),
+      h.Attribute(
+        'class',
+        stylex.attrs(styles.dialog, info.isVisible && styles.dialogOpen)
+          .class ?? '',
+      ),
     ],
     info.isVisible ? children : [],
   )

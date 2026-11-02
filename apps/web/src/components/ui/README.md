@@ -21,6 +21,8 @@ The structure follows shadcn's component API where the two model concepts line u
 
 `data-slot` values match shadcn's names (`button`, `tabs-list`, `tabs-trigger`, `tabs-content`, `dialog-content`, `dialog-overlay`, `dialog-title`, `dialog-description`, `dialog-footer`, `dialog-close`, `dropdown-menu-trigger`, `dropdown-menu-content`, `dropdown-menu-item`, `popover-trigger`, `popover-content`, `tooltip-trigger`, `tooltip-content`, `radio-group`, `radio-group-item`, `switch`, `switch-thumb`, `switch-label`). `data-state` / `data-variant` / `data-size` follow shadcn's conventions, and the scene tests assert a few of them so they cannot silently disappear.
 
+A closed native `<dialog>` must stay `display: none`. The UA sheet hides it, but any author `display` overrides that, and the component's inline `width/height: 100%` then turns the closed element into a full-page sheet that swallows every click. `Dialog.root` applies its grid only while `isVisible`; do not put a `display` on the base dialog class. The `clicks` flow and the doctor check this.
+
 ## Where this deliberately differs
 
 The design is monochrome and typographic. `docs/DESIGN.md` in the site repo says: "Links and buttons are one thing: an underline that firms up on hover, no backgrounds, no pills, no arrows, no primary button." A faithful copy of shadcn's visual variants would contradict that, so:

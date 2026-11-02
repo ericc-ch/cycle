@@ -18,6 +18,15 @@ Nub, not npm, for everything that runs: `nub run dev`, `nub run test`, `nub run 
 
 After any change, run `nub run check` (typecheck, vitest, lint including the Effect rules, then one build).
 
+For anything that touches layout, overlays or event delivery, also run the browser check. `foldkit/scene` runs in happy-dom and cannot see stacking or CSS, which is how a closed `<dialog>` with `display: grid` once covered the whole page:
+
+```sh
+.agents/skills/verify-cycle/scripts/serve.sh
+node .agents/skills/verify-cycle/scripts/doctor.mjs
+node .agents/skills/verify-cycle/scripts/drive.mjs
+.agents/skills/verify-cycle/scripts/stop.sh
+```
+
 ### Layout
 
 `apps/web` is the Vite app. Its styled components live in `apps/web/src/components/ui`, copied into the app in the shadcn style rather than kept in a workspace package. `packages/domain` is date maths, period grouping, the predictor and the scoring harness; it has no Foldkit or DOM import, which is what lets the CLI and the app share it.

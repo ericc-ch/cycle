@@ -29,3 +29,6 @@ data/
 
 # Claude Code worktrees
 .claude/worktrees/
+
+# Verification evidence
+.audit/
