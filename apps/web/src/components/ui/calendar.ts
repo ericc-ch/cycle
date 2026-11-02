@@ -119,6 +119,9 @@ const styles = stylex.create({
     borderColor: palette.fg0,
     color: palette.fg0,
   },
+  dayInRange: {
+    color: palette.fg0,
+  },
   dayToday: {
     color: palette.fg0,
   },
@@ -136,6 +139,12 @@ export type RenderConfig<Message> = Readonly<{
   /** Rendered under the day number. Return `null` for no decoration; the
    *  app returns an empty mark so the numbers stay on one baseline. */
   decoration?: (cell: DayCell, h: HtmlBuilder<Message>) => Html | null
+  /** Days in a range that is still being picked. They get the dark ink of a
+   *  selected day without the border, so the span reads as one run. */
+  isInRange?: (cell: DayCell) => boolean
+  /** The far end of a pending range: bordered like the selected day, so both
+   *  ends of the run are visible. */
+  isRangeStart?: (cell: DayCell) => boolean
   previousLabel?: string
   nextLabel?: string
 }>
@@ -146,11 +155,14 @@ const dayCell = <Message>(
   h: HtmlBuilder<Message>,
 ): Html => {
   const decoration = config.decoration?.(cell, h) ?? null
+  const isInRange = config.isInRange?.(cell) ?? false
+  const isRangeStart = config.isRangeStart?.(cell) ?? false
 
   return h.div(
     [
       ...cell.cellAttributes,
       h.DataAttribute('slot', 'calendar-cell'),
+      ...(isInRange ? [h.DataAttribute('range', '')] : []),
       h.Attribute('class', stylex.attrs(styles.cell).class ?? ''),
     ],
     [
@@ -162,9 +174,13 @@ const dayCell = <Message>(
             'class',
             stylex.attrs(
               styles.day,
-              cell.isSelected && styles.daySelected,
+              // Darkening beats the outside-month grey, so a range that
+              // crosses a month boundary stays visible in the trailing cells.
+              isInRange
+                ? styles.dayInRange
+                : !cell.isInViewMonth && styles.dayOutside,
+              (cell.isSelected || isRangeStart) && styles.daySelected,
               cell.isToday && styles.dayToday,
-              !cell.isInViewMonth && styles.dayOutside,
               cell.isDisabled && styles.dayDisabled,
             ).class ?? '',
           ),

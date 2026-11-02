@@ -13,13 +13,17 @@ import {
   type Flow,
   FlowSchema,
   type Period,
+  StoredFlowSchema,
   cycleDayFor,
   cycleLengths,
   dateKeyFromMillis,
   dateKeyFromParts,
   dateKeyOrder,
+  datesBetween,
   dayOfMonthLabel,
+  flowFromStored,
   flowOn,
+  formatDayNumber,
   isBleedingFlow,
   latestPeriod,
   logsSorted,
@@ -59,12 +63,7 @@ const PREDICTION_SWITCH_ID = 'prediction'
 type Tab = 'Today' | 'History' | 'About'
 
 const tabs: ReadonlyArray<Tab> = ['Today', 'History', 'About']
-const flowChoices: ReadonlyArray<Flow> = [
-  'Spotting',
-  'Light',
-  'Medium',
-  'Heavy',
-]
+const flowChoices: ReadonlyArray<Flow> = ['Bleeding', 'Spotting']
 
 const CycleTabs = Tabs.create<Tab>()
 const FlowGroup = RadioGroup.create<Flow>()
@@ -75,10 +74,22 @@ const DayLogs = Schema.Array(DayLogSchema)
 
 const DayLogsJsonString = Schema.fromJsonString(Schema.toCodecJson(DayLogs))
 
+/** What boot reads: the current shape plus the heaviness levels older builds
+ *  wrote, mapped down by `flowFromStored`. */
+const StoredLogs = Schema.Array(
+  Schema.Struct({ date: Schema.String, flow: StoredFlowSchema }),
+)
+
+const StoredLogsJsonString = Schema.fromJsonString(
+  Schema.toCodecJson(StoredLogs),
+)
+
 export const Model = Schema.Struct({
   logs: DayLogs,
   today: Schema.String,
   selectedDate: Schema.String,
+  rangeStart: Schema.Option(Schema.String),
+  rangeFlow: Schema.Option(FlowSchema),
   acknowledgedLateOn: Schema.Option(Schema.String),
   tab: Schema.Literals(['Today', 'History', 'About']),
   isPredicting: Schema.Boolean,
@@ -96,7 +107,14 @@ export type Model = typeof Model.Type
 
 export const Message = defineMessageUnion({
   LoggedFlow: { date: Schema.String, flow: FlowSchema },
+  LoggedRange: {
+    start: Schema.String,
+    end: Schema.String,
+    flow: FlowSchema,
+  },
   ClearedDay: { date: Schema.String },
+  ArmedRange: {},
+  CancelledRange: {},
   AcknowledgedLate: { date: Schema.String },
   SucceededSaveLogs: { logs: DayLogs },
   FailedSaveLogs: {},
@@ -137,6 +155,8 @@ export const init: Runtime.ApplicationInit<Model, Message, Flags> = flags => ({
     logs: Option.getOrElse(flags.logs, () => []),
     today: flags.today,
     selectedDate: flags.today,
+    rangeStart: Option.none(),
+    rangeFlow: Option.none(),
     acknowledgedLateOn: Option.none(),
     tab: 'Today',
     isPredicting: true,
@@ -185,6 +205,45 @@ const logFlow = (model: Model, date: DateKey, flow: Flow): UpdateReturn => {
     commands: [SaveLogs({ logs })],
   }
 }
+
+/** One save for the whole run, so an interrupted write cannot leave half a
+ *  period in storage. */
+const logRange = (
+  model: Model,
+  start: DateKey,
+  end: DateKey,
+  flow: Flow,
+): UpdateReturn => {
+  const logs = Array.reduce(datesBetween(start, end), model.logs, (acc, date) =>
+    upsertLog(acc, date, flow),
+  )
+
+  return {
+    model: modifyFields(model, {
+      logs: () => logs,
+      rangeStart: () => Option.none(),
+      rangeFlow: () => Option.none(),
+    }),
+    commands: [SaveLogs({ logs })],
+  }
+}
+
+const armRange = (model: Model): UpdateReturn => ({
+  model: modifyFields(model, {
+    rangeStart: () => Option.some(model.selectedDate),
+    rangeFlow: () =>
+      Option.orElse(flowOn(model.logs, model.selectedDate), () =>
+        Option.some<Flow>('Bleeding'),
+      ),
+  }),
+})
+
+const cancelRange = (model: Model): UpdateReturn => ({
+  model: modifyFields(model, {
+    rangeStart: () => Option.none(),
+    rangeFlow: () => Option.none(),
+  }),
+})
 
 const clearDay = (model: Model, date: DateKey): UpdateReturn => {
   const logs = Array.filter(model.logs, log => log.date !== date)
@@ -237,7 +296,13 @@ const foldFlowOutMessage = RadioGroup.OutMessage.match<
   Selected:
     ({ value }) =>
     model =>
-      logFlow(model, model.selectedDate, value),
+      Option.isSome(model.rangeStart)
+        ? {
+            model: modifyFields(model, {
+              rangeFlow: () => Option.some(value),
+            }),
+          }
+        : logFlow(model, model.selectedDate, value),
 })
 
 const foldTooltipOutMessage = Tooltip.OutMessage.match<UpdateStep>({
@@ -341,6 +406,12 @@ const foldClearDialogClose = Update.foldChildStep({
 export const update = (model: Model, message: Message) =>
   Message.match<UpdateReturn>(message, {
     LoggedFlow: ({ date, flow }) => logFlow(model, date, flow),
+
+    LoggedRange: ({ start, end, flow }) => logRange(model, start, end, flow),
+
+    ArmedRange: () => armRange(model),
+
+    CancelledRange: () => cancelRange(model),
 
     ClearedDay: ({ date }) => clearDay(model, date),
 
@@ -477,6 +548,8 @@ const styles = stylex.create({
   rowAction: {
     display: 'flex',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: space.lg,
     minHeight: size.tap,
   },
   rule: {
@@ -499,9 +572,7 @@ const styles = stylex.create({
     backgroundColor: 'transparent',
   },
   markSpotting: { height: '1px', backgroundColor: palette.fg2 },
-  markLight: { backgroundColor: palette.fg2 },
-  markMedium: { backgroundColor: palette.fg1 },
-  markHeavy: { backgroundColor: palette.fg0 },
+  markBleeding: { backgroundColor: palette.fg0 },
   section: {
     display: 'flex',
     flexDirection: 'column',
@@ -593,9 +664,7 @@ const dateLabel = (key: DateKey): string =>
 const flowLabel = (flow: Flow): string =>
   Match.value(flow).pipe(
     Match.when('Spotting', () => 'spotting'),
-    Match.when('Light', () => 'light'),
-    Match.when('Medium', () => 'medium'),
-    Match.when('Heavy', () => 'heavy'),
+    Match.when('Bleeding', () => 'bleeding'),
     Match.exhaustive,
   )
 
@@ -605,9 +674,7 @@ const markStyle = (maybeFlow: Option.Option<Flow>) =>
     onSome: flow =>
       Match.value(flow).pipe(
         Match.when('Spotting', () => styles.markSpotting),
-        Match.when('Light', () => styles.markLight),
-        Match.when('Medium', () => styles.markMedium),
-        Match.when('Heavy', () => styles.markHeavy),
+        Match.when('Bleeding', () => styles.markBleeding),
         Match.exhaustive,
       ),
   })
@@ -687,12 +754,7 @@ const statusView = (
         ),
         h.p(
           [h.Attribute('class', stylex.attrs(styles.detail).class ?? '')],
-          [
-            Option.match(maybeTodayFlow, {
-              onNone: () => 'Bleeding',
-              onSome: flow => `Bleeding · ${flowLabel(flow)}`,
-            }),
-          ],
+          ['Bleeding'],
         ),
       ],
     )
@@ -829,8 +891,13 @@ const flowMark = (model: Model, date: DateKey, h: HtmlBuilder<Message>): Html =>
     ),
   ])
 
-const calendarView = (model: Model, h: HtmlBuilder<Message>): Html =>
-  h.submodel({
+const calendarView = (model: Model, h: HtmlBuilder<Message>): Html => {
+  const rangeDays = Option.match(model.rangeStart, {
+    onNone: () => new Set<DateKey>(),
+    onSome: start => new Set(datesBetween(start, model.selectedDate)),
+  })
+
+  return h.submodel({
     slotId: CALENDAR_ID,
     model: model.calendar,
     view: Calendar.view,
@@ -843,6 +910,9 @@ const calendarView = (model: Model, h: HtmlBuilder<Message>): Html =>
           attributes,
           {
             decoration: cell => flowMark(model, dateKeyFromParts(cell.date), h),
+            isInRange: cell => rangeDays.has(dateKeyFromParts(cell.date)),
+            isRangeStart: cell =>
+              Option.contains(model.rangeStart, dateKeyFromParts(cell.date)),
             previousLabel: 'Prev',
             nextLabel: 'Next',
           },
@@ -851,10 +921,43 @@ const calendarView = (model: Model, h: HtmlBuilder<Message>): Html =>
     },
     toParentMessage: message => Message.GotCalendarMessage({ message }),
   })
+}
+
+const rangeLabel = (start: DateKey, end: DateKey): string =>
+  Option.match(Option.all([parseDayNumber(start), parseDayNumber(end)]), {
+    onNone: () => 'a range',
+    onSome: ([startDay, endDay]) => {
+      const low = Math.min(startDay, endDay)
+      const high = Math.max(startDay, endDay)
+
+      if (low === high) {
+        return `${weekdayLabel(low)} ${monthDayLabel(low)}`
+      }
+
+      return formatDayNumber(low).slice(0, 7) ===
+        formatDayNumber(high).slice(0, 7)
+        ? `${dayOfMonthLabel(low)} – ${monthDayLabel(high)}`
+        : `${monthDayLabel(low)} – ${monthDayLabel(high)}`
+    },
+  })
 
 const flowEditorView = (model: Model, h: HtmlBuilder<Message>): Html => {
   const maybeSelected = parseDayNumber(model.selectedDate)
   const currentFlow = flowOn(model.logs, model.selectedDate)
+  const maybeRange = Option.map(model.rangeStart, start => ({
+    start,
+    end: model.selectedDate,
+    days: datesBetween(start, model.selectedDate).length,
+  }))
+  const maybeRangeFlow = Option.orElse(model.rangeFlow, () =>
+    Option.some<Flow>('Bleeding'),
+  )
+
+  const actionRow = (...children: ReadonlyArray<Html>): Html =>
+    h.div(
+      [h.Attribute('class', stylex.attrs(styles.rowAction).class ?? '')],
+      [...children],
+    )
 
   return Option.match(maybeSelected, {
     onNone: () => h.empty,
@@ -873,15 +976,23 @@ const flowEditorView = (model: Model, h: HtmlBuilder<Message>): Html => {
               h.span(
                 [],
                 [
-                  `${weekdayLabel(selectedNumber)} ${monthDayLabel(selectedNumber)}`,
+                  Option.match(maybeRange, {
+                    onNone: () =>
+                      `${weekdayLabel(selectedNumber)} ${monthDayLabel(selectedNumber)}`,
+                    onSome: range => rangeLabel(range.start, range.end),
+                  }),
                 ],
               ),
               h.span(
                 [h.Attribute('class', stylex.attrs(styles.mono).class ?? '')],
                 [
-                  Option.match(currentFlow, {
-                    onNone: () => 'nothing logged',
-                    onSome: flowLabel,
+                  Option.match(maybeRange, {
+                    onNone: () =>
+                      Option.match(currentFlow, {
+                        onNone: () => 'nothing logged',
+                        onSome: flowLabel,
+                      }),
+                    onSome: range => plural(range.days, 'day', 'days'),
                   }),
                 ],
               ),
@@ -893,34 +1004,68 @@ const flowEditorView = (model: Model, h: HtmlBuilder<Message>): Html => {
             view: FlowGroup.view,
             viewInputs: {
               options: flowChoices,
-              selectedValue: currentFlow,
+              selectedValue: Option.match(maybeRange, {
+                onNone: () => currentFlow,
+                onSome: () => maybeRangeFlow,
+              }),
               ariaLabel: 'Flow',
               orientation: 'Horizontal',
               toView: info => RadioGroup.render(info, value => value, h),
             },
             toParentMessage: message => Message.GotFlowMessage({ message }),
           }),
-          Option.match(currentFlow, {
-            onNone: () => h.empty,
-            onSome: () =>
-              h.div(
-                [
-                  h.Attribute(
-                    'class',
-                    stylex.attrs(styles.rowAction).class ?? '',
-                  ),
-                ],
-                [
-                  Button.render(
-                    {
-                      label: 'Clear this day',
-                      onClick: Message.ClearedDay({ date: model.selectedDate }),
-                      variant: 'ghost',
-                      size: 'sm',
-                    },
-                    h,
-                  ),
-                ],
+          Option.match(maybeRange, {
+            onNone: () =>
+              actionRow(
+                Button.render(
+                  {
+                    label: 'Mark a range',
+                    onClick: Message.ArmedRange(),
+                    variant: 'ghost',
+                    size: 'sm',
+                  },
+                  h,
+                ),
+                ...(Option.isSome(currentFlow)
+                  ? [
+                      Button.render(
+                        {
+                          label: 'Clear this day',
+                          onClick: Message.ClearedDay({
+                            date: model.selectedDate,
+                          }),
+                          variant: 'ghost',
+                          size: 'sm',
+                        },
+                        h,
+                      ),
+                    ]
+                  : []),
+              ),
+            onSome: range =>
+              actionRow(
+                Button.render(
+                  {
+                    label: `Mark ${plural(range.days, 'day', 'days')} as ${flowLabel(
+                      Option.getOrElse(maybeRangeFlow, () => 'Bleeding'),
+                    )}`,
+                    onClick: Message.LoggedRange({
+                      start: range.start,
+                      end: range.end,
+                      flow: Option.getOrElse(maybeRangeFlow, () => 'Bleeding'),
+                    }),
+                  },
+                  h,
+                ),
+                Button.render(
+                  {
+                    label: 'Cancel',
+                    onClick: Message.CancelledRange(),
+                    variant: 'ghost',
+                    size: 'sm',
+                  },
+                  h,
+                ),
               ),
           }),
         ],
@@ -934,9 +1079,7 @@ const legendContent = (h: HtmlBuilder<Message>): Html =>
     [
       ...Array.map(
         [
-          { label: 'heavy', style: styles.markHeavy },
-          { label: 'medium', style: styles.markMedium },
-          { label: 'light', style: styles.markLight },
+          { label: 'bleeding', style: styles.markBleeding },
           { label: 'spotting', style: styles.markSpotting },
         ] as const,
         entry =>
@@ -960,7 +1103,7 @@ const legendContent = (h: HtmlBuilder<Message>): Html =>
       ),
       h.p(
         [h.Attribute('class', stylex.attrs(styles.quiet).class ?? '')],
-        ['Ink, not colour: darker means a heavier day.'],
+        ['A line under a day means bleeding or spotting, nothing else.'],
       ),
     ],
   )
@@ -1320,7 +1463,11 @@ export const flags: Effect.Effect<Flags> = Effect.gen(function* () {
   const logsJson = yield* Effect.fromOption(
     Option.fromNullishOr(yield* store.get(LOGS_STORAGE_KEY)),
   )
-  const logs = yield* Schema.decodeEffect(DayLogsJsonString)(logsJson)
+  const stored = yield* Schema.decodeEffect(StoredLogsJsonString)(logsJson)
+  const logs = Array.map(stored, log => ({
+    date: log.date,
+    flow: flowFromStored(log.flow),
+  }))
 
   return { logs: Option.some(logs), today: dateKeyFromMillis(millis) }
 }).pipe(

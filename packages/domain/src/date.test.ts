@@ -4,6 +4,7 @@ import { describe, expect, test } from 'vitest'
 import {
   dateKeyFromMillis,
   dateKeyFromParts,
+  datesBetween,
   dayOfMonthLabel,
   formatDayNumber,
   parseDayNumber,
@@ -85,5 +86,41 @@ describe('parts', () => {
     expect(dateKeyFromParts({ year: 2026, month: 1, day: 5 })).toBe(
       '2026-01-05',
     )
+  })
+})
+
+describe('datesBetween', () => {
+  test('lists both ends and every day inside', () => {
+    expect(datesBetween('2026-10-17', '2026-10-20')).toStrictEqual([
+      '2026-10-17',
+      '2026-10-18',
+      '2026-10-19',
+      '2026-10-20',
+    ])
+  })
+
+  test('reads the same either way round', () => {
+    expect(datesBetween('2026-10-20', '2026-10-17')).toStrictEqual(
+      datesBetween('2026-10-17', '2026-10-20'),
+    )
+  })
+
+  test('a single day is one entry', () => {
+    expect(datesBetween('2026-10-20', '2026-10-20')).toStrictEqual([
+      '2026-10-20',
+    ])
+  })
+
+  test('crosses a month boundary', () => {
+    expect(datesBetween('2026-10-30', '2026-11-02')).toStrictEqual([
+      '2026-10-30',
+      '2026-10-31',
+      '2026-11-01',
+      '2026-11-02',
+    ])
+  })
+
+  test('gives nothing for a key that is not a date', () => {
+    expect(datesBetween('2026-02-30', '2026-03-02')).toStrictEqual([])
   })
 })

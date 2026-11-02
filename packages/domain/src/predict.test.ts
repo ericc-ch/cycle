@@ -13,7 +13,7 @@ import {
   stateFor,
 } from './predict'
 
-const log = (date: string, flow: DayLog['flow'] = 'Medium'): DayLog => ({
+const log = (date: string, flow: DayLog['flow'] = 'Bleeding'): DayLog => ({
   date,
   flow,
 })

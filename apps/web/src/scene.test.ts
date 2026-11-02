@@ -17,12 +17,12 @@ import { Message, type Model, SaveLogs, init, update, view } from './main'
 const TODAY = '2026-10-20'
 
 const twoPeriods = [
-  { date: '2026-09-05', flow: 'Medium' as const },
-  { date: '2026-09-06', flow: 'Heavy' as const },
-  { date: '2026-09-07', flow: 'Light' as const },
-  { date: '2026-10-03', flow: 'Medium' as const },
-  { date: '2026-10-04', flow: 'Heavy' as const },
-  { date: '2026-10-05', flow: 'Light' as const },
+  { date: '2026-09-05', flow: 'Bleeding' as const },
+  { date: '2026-09-06', flow: 'Bleeding' as const },
+  { date: '2026-09-07', flow: 'Bleeding' as const },
+  { date: '2026-10-03', flow: 'Bleeding' as const },
+  { date: '2026-10-04', flow: 'Bleeding' as const },
+  { date: '2026-10-05', flow: 'Bleeding' as const },
 ]
 
 const baseModel: Model = init({
@@ -64,18 +64,18 @@ describe('view', () => {
   })
 
   test('logging today turns the status into a bleeding day', () => {
-    const logged = [...twoPeriods, { date: TODAY, flow: 'Medium' as const }]
+    const logged = [...twoPeriods, { date: TODAY, flow: 'Bleeding' as const }]
 
     scene(
       { update, view },
       given(baseModel),
-      click(role('radio', { name: 'Medium' })),
+      click(role('radio', { name: 'Bleeding' })),
       Command.resolve(
         RadioGroup.FocusOption,
         RadioGroup.Message.CompletedFocusOption(),
       ),
       Command.resolve(SaveLogs, Message.SucceededSaveLogs({ logs: logged })),
-      expect(role('status')).toContainText('Bleeding · medium'),
+      expect(role('status')).toContainText('Bleeding'),
     )
   })
 
@@ -83,7 +83,7 @@ describe('view', () => {
     scene(
       { update, view },
       given(baseModel),
-      keydown(role('radio', { name: 'Spotting' }), 'ArrowRight'),
+      keydown(role('radio', { name: 'Bleeding' }), 'ArrowRight'),
       Command.resolve(
         RadioGroup.FocusOption,
         RadioGroup.Message.CompletedFocusOption(),
@@ -91,10 +91,35 @@ describe('view', () => {
       Command.resolve(
         SaveLogs,
         Message.SucceededSaveLogs({
-          logs: [...twoPeriods, { date: TODAY, flow: 'Light' as const }],
+          logs: [...twoPeriods, { date: TODAY, flow: 'Spotting' as const }],
         }),
       ),
-      expect(role('radio', { name: 'Light' })).toBeChecked(),
+      expect(role('radio', { name: 'Spotting' })).toBeChecked(),
+    )
+  })
+
+  test('a range is armed, previewed and committed in one save', () => {
+    scene(
+      { update, view },
+      given(baseModel),
+      click(role('button', { name: 'Mark a range' })),
+      click(role('button', { name: 'Saturday, October 17, 2026' })),
+      expect(text('17 – 20 Oct')).toExist(),
+      click(role('button', { name: 'Mark 4 days as bleeding' })),
+      Command.resolve(
+        SaveLogs,
+        Message.SucceededSaveLogs({
+          logs: [
+            ...twoPeriods,
+            { date: '2026-10-17', flow: 'Bleeding' as const },
+            { date: '2026-10-18', flow: 'Bleeding' as const },
+            { date: '2026-10-19', flow: 'Bleeding' as const },
+            { date: TODAY, flow: 'Bleeding' as const },
+          ],
+        }),
+      ),
+      expect(text('Sat 17 Oct')).toExist(),
+      expect(role('button', { name: 'Mark a range' })).toExist(),
     )
   })
 

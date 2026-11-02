@@ -41,16 +41,26 @@ const dayKey = daysAgo => {
   return date.toISOString().slice(0, 10)
 }
 
+/** The app's `today` comes from local date parts, so a seed for "now" has to
+ *  as well; `dayKey` is UTC and can be a day off near midnight. */
+const localDayKey = daysAgo => {
+  const date = new Date()
+  date.setDate(date.getDate() - daysAgo)
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  return `${date.getFullYear()}-${month}-${day}`
+}
+
 // Two past periods, so the app is in the predicted state with History rows.
 // This is setup, not the path under test: the period derivation itself is
 // covered by packages/domain tests.
 const twoPeriods = [
-  { date: dayKey(40), flow: 'Medium' },
-  { date: dayKey(39), flow: 'Heavy' },
-  { date: dayKey(38), flow: 'Light' },
-  { date: dayKey(10), flow: 'Medium' },
-  { date: dayKey(9), flow: 'Heavy' },
-  { date: dayKey(8), flow: 'Light' },
+  { date: dayKey(40), flow: 'Bleeding' },
+  { date: dayKey(39), flow: 'Bleeding' },
+  { date: dayKey(38), flow: 'Bleeding' },
+  { date: dayKey(10), flow: 'Bleeding' },
+  { date: dayKey(9), flow: 'Bleeding' },
+  { date: dayKey(8), flow: 'Bleeding' },
 ]
 
 const seed = async (browser, logs) => {
@@ -159,19 +169,19 @@ const flows = {
       String(checked),
     )
 
-    await browser.click('[role="radio"]', 'Light')
+    await browser.click('[role="radio"]', 'Bleeding')
     await browser.waitFor(
-      `(document.querySelector('[role="status"]')?.innerText ?? '').includes('Bleeding · light')`,
+      `(document.querySelector('[role="status"]')?.innerText ?? '').includes('Bleeding')`,
       { label: 'status to report bleeding' },
     )
     must(
       flow,
       'status reports the bleeding day',
-      (await statusText(browser)).includes('Bleeding · light'),
+      (await statusText(browser)).includes('Bleeding'),
     )
 
     await browser.waitFor(
-      `(localStorage.getItem('cycle.logs') ?? '').includes('Light')`,
+      `(localStorage.getItem('cycle.logs') ?? '').includes('Bleeding')`,
       { label: 'the log to reach localStorage' },
     )
 
@@ -180,7 +190,7 @@ const flows = {
     must(
       flow,
       'log persisted to localStorage',
-      logs.length === 1 && logs[0].flow === 'Light',
+      logs.length === 1 && logs[0].flow === 'Bleeding',
       String(stored),
     )
 
@@ -190,7 +200,7 @@ const flows = {
     must(
       flow,
       'the log survives a reload',
-      (await statusText(browser)).includes('Bleeding · light'),
+      (await statusText(browser)).includes('Bleeding'),
       await statusText(browser),
     )
 
@@ -213,6 +223,70 @@ const flows = {
     )
 
     await browser.screenshot(join(outDir, 'flow-cleared.png'))
+
+    // A forgotten period is caught up with two taps: arm the range, pick the
+    // far end, commit once.
+    const rangeStartLabel = await browser.evaluate(`(() => {
+      const days = [...document.querySelectorAll('[data-slot="calendar-day"]')]
+      const todayIndex = days.findIndex(node =>
+        node.closest('[data-slot="calendar-cell"]')?.hasAttribute('data-today'))
+      return days[todayIndex - 3]?.getAttribute('aria-label') ?? null
+    })()`)
+
+    must(
+      flow,
+      'the day three back is on screen',
+      typeof rangeStartLabel === 'string',
+      String(rangeStartLabel),
+    )
+
+    await browser.click('[data-slot="button"]', 'Mark a range')
+    await browser.click('[data-slot="calendar-day"]', rangeStartLabel)
+    await browser.waitFor(`document.body.innerText.includes('4 days')`, {
+      label: 'the range preview to report four days',
+    })
+    must(flow, 'the range previews its length', true)
+
+    await browser.screenshot(join(outDir, 'flow-range.png'))
+
+    await browser.click('[data-slot="button"]', 'Mark 4 days as bleeding')
+    await browser.waitFor(
+      `(() => {
+        const raw = localStorage.getItem('cycle.logs')
+        return raw !== null && JSON.parse(raw).length === 4
+      })()`,
+      { label: 'four days in localStorage' },
+    )
+
+    const rangeLogs = JSON.parse(
+      await browser.evaluate(`localStorage.getItem('cycle.logs')`),
+    )
+    must(
+      flow,
+      'one confirm writes every day in the range',
+      rangeLogs.length === 4 && rangeLogs.every(log => log.flow === 'Bleeding'),
+      JSON.stringify(rangeLogs),
+    )
+    must(
+      flow,
+      'the range leaves the editor ready for the next day',
+      (await browser.evaluate(
+        `[...document.querySelectorAll('[data-slot="button"]')].some(node => node.textContent.trim() === 'Mark a range')`,
+      )) === true,
+    )
+
+    // A level from the four-level build must still count as bleeding. If the
+    // boot decode rejects it, flags drops every log and her history is gone.
+    await browser.evaluate(
+      `localStorage.setItem('cycle.logs', JSON.stringify([{ date: ${JSON.stringify(localDayKey(0))}, flow: 'Heavy' }]))`,
+    )
+    await browser.goto(URL)
+    must(
+      flow,
+      'a level from the old build still reads as bleeding',
+      (await statusText(browser)).includes('Bleeding'),
+      await statusText(browser),
+    )
   },
 
   async tabs(browser) {
@@ -346,14 +420,14 @@ const flows = {
       `document.querySelector('[data-slot="popover-content"]') !== null`,
       { label: 'legend popover', timeout: 3000 },
     )
+    const legendText = await browser.evaluate(
+      `document.querySelector('[data-slot="popover-content"]')?.innerText ?? ''`,
+    )
     must(
       flow,
-      'the legend explains the ink levels',
-      (
-        await browser.evaluate(
-          `document.querySelector('[data-slot="popover-content"]')?.innerText ?? ''`,
-        )
-      ).includes('Ink, not colour'),
+      'the legend names both marks',
+      legendText.includes('bleeding') && legendText.includes('spotting'),
+      legendText.replace(/\n/g, ' / '),
     )
     await browser.screenshot(join(outDir, 'overlays-popover.png'))
 

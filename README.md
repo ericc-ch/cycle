@@ -17,7 +17,8 @@ nub run check    # typecheck, tests, lint, build
 ## What it does
 
 - Three sections — Today, History, About — sit in a bar at the bottom of a phone screen, where a thumb reaches them. On a wide window the same row moves back under the heading.
-- Tap any day in the month calendar and set flow: spotting, light, medium, heavy. A logged day offers `Clear this day`.
+- Tap any day in the month calendar and say what it was: bleeding, or spotting. A logged day offers `Clear this day`.
+- Forgot a few days? Tap one end of the run, `Mark a range`, tap the other end, and one confirm writes every day between.
 - Periods are derived from those days, not from a start/end form. A bleeding day starts a new period only after two clear days, and spotting never starts one.
 - The next period is shown as a date range, never a single date, with a confidence word.
 - If the cycle runs past its range the app asks a question instead of showing a red day counter.
@@ -86,6 +87,6 @@ Monochrome and typographic, borrowed from [my site](https://github.com/ericc-ch/
 
 The mono face is loaded and its token (`font.mono`) is still there, but every surface currently uses Plus Jakarta Sans. Switch a style over when dates or code should get the second face back.
 
-There is no accent colour. Flow is encoded in ink: spotting is a hairline, light and medium are mid greys, heavy is full foreground. State lives in text, never in colour alone.
+There is no accent colour. Flow is encoded in ink: spotting is a hairline, bleeding is a full-ink bar. State lives in text, never in colour alone.
 
 Behaviour comes from [@foldkit/ui](https://foldkit.dev/ui/overview): the ARIA roles, keyboard handling, focus management and submodel state are the library's. The styled wrappers in `apps/web/src/components/ui` only supply the markup and the StyleX styles each component renders through its `toView` hook.

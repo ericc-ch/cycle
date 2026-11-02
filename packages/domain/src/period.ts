@@ -7,8 +7,22 @@ import {
   parseDayNumber,
 } from './date'
 
-export const Flow = Schema.Literals(['Spotting', 'Light', 'Medium', 'Heavy'])
+export const Flow = Schema.Literals(['Spotting', 'Bleeding'])
 export type Flow = typeof Flow.Type
+
+/** What older builds stored: spotting plus three heaviness levels. Read on
+ *  boot so an existing log is not lost; nothing writes it any more. */
+export const StoredFlow = Schema.Literals([
+  'Spotting',
+  'Light',
+  'Medium',
+  'Heavy',
+  'Bleeding',
+])
+export type StoredFlow = typeof StoredFlow.Type
+
+export const flowFromStored = (flow: StoredFlow): Flow =>
+  flow === 'Spotting' ? 'Spotting' : 'Bleeding'
 
 export const DayLog = Schema.Struct({
   date: Schema.String,
@@ -27,7 +41,7 @@ const MAX_CYCLE_DAYS = 90
 const MAX_BREAK_DAYS = 2
 const MAX_TRAILING_SPOTTING_DAYS = 1
 
-export const isBleedingFlow = (flow: Flow): boolean => flow !== 'Spotting'
+export const isBleedingFlow = (flow: Flow): boolean => flow === 'Bleeding'
 
 type DraftPeriod = {
   readonly start: number

@@ -62,7 +62,7 @@ Flows live in `scripts/drive.mjs` and map to `features/*.md`:
 | Flow       | What it proves                                                                                        |
 | ---------- | ----------------------------------------------------------------------------------------------------- |
 | `clicks`   | every visible control receives its own click; no overlay steals input                                 |
-| `flow`     | pick a day, log flow, status changes, survives reload, clear it                                       |
+| `flow`     | pick a day, log bleeding, survives reload, clear it; then a four-day range in one confirm             |
 | `tabs`     | Today/History/About switch panels; the prediction switch reaches the status                           |
 | `overlays` | About opens the explainer and clear dialogs and Escape closes them; legend and tooltip open and close |
 | `mobile`   | at 390x844 the bar is fixed to the bottom, every tab is 44px, nothing scrolls sideways                |

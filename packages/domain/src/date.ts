@@ -1,4 +1,4 @@
-import { Option, Order } from 'effect'
+import { Array, Option, Order } from 'effect'
 
 const MILLISECONDS_PER_DAY = 86_400_000
 const DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/
@@ -65,6 +65,24 @@ export const partsFromDateKey = (key: DateKey): Option.Option<DateParts> =>
 
 export const dateKeyFromParts = ({ year, month, day }: DateParts): DateKey =>
   `${year}-${`${month}`.padStart(2, '0')}-${`${day}`.padStart(2, '0')}`
+
+/** Every day from `start` to `end`, both included. The ends may arrive in
+ *  either order: a range picked right to left fills the same days. */
+export const datesBetween = (
+  start: DateKey,
+  end: DateKey,
+): ReadonlyArray<DateKey> =>
+  Option.match(Option.all([parseDayNumber(start), parseDayNumber(end)]), {
+    onNone: () => [],
+    onSome: ([startDay, endDay]) => {
+      const low = Math.min(startDay, endDay)
+      const high = Math.max(startDay, endDay)
+
+      return Array.makeBy(high - low + 1, offset =>
+        formatDayNumber(low + offset),
+      )
+    },
+  })
 
 export const weekdayLabel = (dayNumber: number): string =>
   new Date(dayNumber * MILLISECONDS_PER_DAY).toLocaleDateString('en-GB', {

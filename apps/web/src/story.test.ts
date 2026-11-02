@@ -8,15 +8,15 @@ import { Message, type Model, SaveLogs, init, update } from './main'
 const TODAY = '2026-10-20'
 
 const septemberPeriod = [
-  { date: '2026-09-05', flow: 'Medium' as const },
-  { date: '2026-09-06', flow: 'Heavy' as const },
-  { date: '2026-09-07', flow: 'Light' as const },
+  { date: '2026-09-05', flow: 'Bleeding' as const },
+  { date: '2026-09-06', flow: 'Bleeding' as const },
+  { date: '2026-09-07', flow: 'Bleeding' as const },
 ]
 
 const octoberPeriod = [
-  { date: '2026-10-03', flow: 'Medium' as const },
-  { date: '2026-10-04', flow: 'Heavy' as const },
-  { date: '2026-10-05', flow: 'Light' as const },
+  { date: '2026-10-03', flow: 'Bleeding' as const },
+  { date: '2026-10-04', flow: 'Bleeding' as const },
+  { date: '2026-10-05', flow: 'Bleeding' as const },
 ]
 
 const baseModel: Model = init({
@@ -72,13 +72,13 @@ describe('update', () => {
     const expectedLogs = [
       ...septemberPeriod,
       ...octoberPeriod,
-      { date: TODAY, flow: 'Medium' as const },
+      { date: TODAY, flow: 'Bleeding' as const },
     ]
 
     story(
       update,
       given(baseModel),
-      message(Message.LoggedFlow({ date: TODAY, flow: 'Medium' })),
+      message(Message.LoggedFlow({ date: TODAY, flow: 'Bleeding' })),
       Command.expectExact(SaveLogs),
       Command.resolve(
         SaveLogs,
@@ -93,15 +93,15 @@ describe('update', () => {
   test('LoggedFlow replaces the flow already stored for that day', () => {
     const expectedLogs = [
       ...septemberPeriod,
-      { date: '2026-10-03', flow: 'Light' as const },
-      { date: '2026-10-04', flow: 'Heavy' as const },
-      { date: '2026-10-05', flow: 'Light' as const },
+      { date: '2026-10-03', flow: 'Bleeding' as const },
+      { date: '2026-10-04', flow: 'Bleeding' as const },
+      { date: '2026-10-05', flow: 'Bleeding' as const },
     ]
 
     story(
       update,
       given(baseModel),
-      message(Message.LoggedFlow({ date: '2026-10-03', flow: 'Light' })),
+      message(Message.LoggedFlow({ date: '2026-10-03', flow: 'Bleeding' })),
       Command.expectExact(SaveLogs),
       Command.resolve(
         SaveLogs,
@@ -190,7 +190,7 @@ describe('update', () => {
     story(
       update,
       given({ ...baseModel, logs: [...octoberPeriod] }),
-      message(Message.LoggedFlow({ date: TODAY, flow: 'Heavy' })),
+      message(Message.LoggedFlow({ date: TODAY, flow: 'Bleeding' })),
       Command.expectExact(SaveLogs),
       Command.resolve(SaveLogs, Message.FailedSaveLogs()),
       model(model => {
