@@ -1,6 +1,6 @@
 import { Array, Clock, Effect, Match, Option, Order, Schema } from 'effect'
 import { KeyValueStore } from 'effect/persistence'
-import { Command, Runtime, type Update } from 'foldkit'
+import { Command, Runtime, Update } from 'foldkit'
 import type { Document, Html, HtmlBuilder } from 'foldkit/html'
 import { defineMessageUnion } from 'foldkit/message'
 import { modifyFields } from 'foldkit/struct'
@@ -35,9 +35,9 @@ import {
   Dialog,
   Menu,
   Popover,
+  RadioGroup,
   Switch,
   Tabs,
-  ToggleGroup,
   Tooltip,
 } from '@cycle/ui'
 import { font, palette, space, typeScale } from '@cycle/ui/src/tokens.stylex.js'
@@ -47,17 +47,31 @@ import * as stylex from '@stylexjs/stylex'
 const LOGS_STORAGE_KEY = 'cycle.logs'
 const DAYS_SHOWN = 14
 const TABS_ID = 'cycle-tabs'
+const FLOW_ID = 'flow'
+const TOOLTIP_ID = 'confidence'
+const LEGEND_ID = 'legend'
+const DATA_MENU_ID = 'data-menu'
+const ABOUT_DIALOG_ID = 'about-dialog'
+const CLEAR_DIALOG_ID = 'clear-dialog'
+const PREDICTION_SWITCH_ID = 'prediction'
 
 type Tab = 'Today' | 'History' | 'About'
 type FlowChoice = 'None' | Flow
+type DataItem = 'about' | 'clear'
 
-const flowChoices: ReadonlyArray<ToggleGroup.ToggleOption<FlowChoice>> = [
-  { value: 'None', label: 'None' },
-  { value: 'Spotting', label: 'Spotting' },
-  { value: 'Light', label: 'Light' },
-  { value: 'Medium', label: 'Medium' },
-  { value: 'Heavy', label: 'Heavy' },
+const tabs: ReadonlyArray<Tab> = ['Today', 'History', 'About']
+const flowChoices: ReadonlyArray<FlowChoice> = [
+  'None',
+  'Spotting',
+  'Light',
+  'Medium',
+  'Heavy',
 ]
+const dataItems: ReadonlyArray<DataItem> = ['about', 'clear']
+
+const CycleTabs = Tabs.create<Tab>()
+const FlowGroup = RadioGroup.create<FlowChoice>()
+const DataMenu = Menu.create<DataItem>()
 
 // MODEL
 
@@ -72,12 +86,13 @@ export const Model = Schema.Struct({
   acknowledgedLateOn: Schema.Option(Schema.String),
   tab: Schema.Literals(['Today', 'History', 'About']),
   isPredicting: Schema.Boolean,
-  isTooltipOpen: Schema.Boolean,
-  isLegendOpen: Schema.Boolean,
-  isMenuOpen: Schema.Boolean,
-  menuIndex: Schema.Number,
-  isAboutOpen: Schema.Boolean,
-  isClearOpen: Schema.Boolean,
+  tabs: Tabs.Model,
+  flow: RadioGroup.Model,
+  tooltip: Tooltip.Model,
+  legend: Popover.Model,
+  menu: Menu.Model,
+  aboutDialog: Dialog.Model,
+  clearDialog: Dialog.Model,
 })
 export type Model = typeof Model.Type
 
@@ -90,26 +105,17 @@ export const Message = defineMessageUnion({
   AcknowledgedLate: { date: Schema.String },
   SucceededSaveLogs: { logs: DayLogs },
   FailedSaveLogs: {},
-
-  SelectedTab: { tab: Schema.Literals(['Today', 'History', 'About']) },
-  ToggledPrediction: {},
-
-  ShowedTooltip: {},
-  HidTooltip: {},
-
-  OpenedLegend: {},
-  ClosedLegend: {},
-
-  OpenedMenu: {},
-  ClosedMenu: {},
-  MovedMenuIndex: { index: Schema.Number },
-
-  OpenedAbout: {},
-  ClosedAbout: {},
-
-  OpenedClearConfirm: {},
-  ClosedClearConfirm: {},
+  SetPrediction: { isPredicting: Schema.Boolean },
   ClearedAllLogs: {},
+  OpenedAbout: {},
+
+  GotTabsMessage: { message: Tabs.Message },
+  GotFlowMessage: { message: RadioGroup.Message },
+  GotTooltipMessage: { message: Tooltip.Message },
+  GotLegendMessage: { message: Popover.Message },
+  GotMenuMessage: { message: Menu.Message },
+  GotAboutDialogMessage: { message: Dialog.Message },
+  GotClearDialogMessage: { message: Dialog.Message },
 })
 export type Message = typeof Message.Type
 
@@ -131,18 +137,20 @@ export const init: Runtime.ApplicationInit<Model, Message, Flags> = flags => ({
     acknowledgedLateOn: Option.none(),
     tab: 'Today',
     isPredicting: true,
-    isTooltipOpen: false,
-    isLegendOpen: false,
-    isMenuOpen: false,
-    menuIndex: -1,
-    isAboutOpen: false,
-    isClearOpen: false,
+    tabs: Tabs.init({ id: TABS_ID }),
+    flow: RadioGroup.init({ id: FLOW_ID }),
+    tooltip: Tooltip.init({ id: TOOLTIP_ID }),
+    legend: Popover.init({ id: LEGEND_ID }),
+    menu: Menu.init({ id: DATA_MENU_ID }),
+    aboutDialog: Dialog.init({ id: ABOUT_DIALOG_ID }),
+    clearDialog: Dialog.init({ id: CLEAR_DIALOG_ID }),
   },
 })
 
 // UPDATE
 
 type UpdateReturn = Update.Return<Model, Message>
+type UpdateStep = Update.Step<Model, Message>
 
 const upsertLog = (
   logs: ReadonlyArray<DayLog>,
@@ -158,37 +166,181 @@ const upsertLog = (
   )
 }
 
+const logFlow = (model: Model, date: DateKey, flow: Flow): UpdateReturn => {
+  const logs = upsertLog(model.logs, date, flow)
+
+  return {
+    model: modifyFields(model, {
+      logs: () => logs,
+      selectedDate: () => date,
+    }),
+    commands: [SaveLogs({ logs })],
+  }
+}
+
+const clearDay = (model: Model, date: DateKey): UpdateReturn => {
+  const logs = Array.filter(model.logs, log => log.date !== date)
+
+  return {
+    model: modifyFields(model, { logs: () => logs }),
+    commands: [SaveLogs({ logs })],
+  }
+}
+
+const clearAllLogs = (model: Model): UpdateReturn => ({
+  model: modifyFields(model, {
+    logs: () => [],
+    isPredicting: () => true,
+  }),
+  commands: [SaveLogs({ logs: [] })],
+})
+
+const foldDialogOutMessage = Dialog.OutMessage.match<UpdateStep>({
+  Opened: () => model => ({ model }),
+  Closed: () => model => ({ model }),
+})
+
+const foldTabsOutMessage = Tabs.OutMessage.match<
+  UpdateStep,
+  Tabs.OutMessage<Tab>
+>({
+  Selected:
+    ({ value }) =>
+    model => ({
+      model: modifyFields(model, { tab: () => value }),
+    }),
+})
+
+const foldFlowOutMessage = RadioGroup.OutMessage.match<
+  UpdateStep,
+  RadioGroup.OutMessage<FlowChoice>
+>({
+  Selected:
+    ({ value }) =>
+    model =>
+      value === 'None'
+        ? clearDay(model, model.selectedDate)
+        : logFlow(model, model.selectedDate, value),
+})
+
+const foldTooltipOutMessage = Tooltip.OutMessage.match<UpdateStep>({
+  Shown: () => model => ({ model }),
+  Hidden: () => model => ({ model }),
+})
+
+const foldLegendOutMessage = Popover.OutMessage.match<UpdateStep>({
+  Opened: () => model => ({ model }),
+  Closed: () => model => ({ model }),
+})
+
+const foldTabs = Update.foldChild({
+  update: CycleTabs.update,
+  read: (model: Model) => Option.some(model.tabs),
+  write: (model, nextTabs) => modifyFields(model, { tabs: () => nextTabs }),
+  toParentMessage: message => Message.GotTabsMessage({ message }),
+  foldOutMessage: foldTabsOutMessage,
+})
+
+const foldFlow = Update.foldChild({
+  update: FlowGroup.update,
+  read: (model: Model) => Option.some(model.flow),
+  write: (model, nextFlow) => modifyFields(model, { flow: () => nextFlow }),
+  toParentMessage: message => Message.GotFlowMessage({ message }),
+  foldOutMessage: foldFlowOutMessage,
+})
+
+const foldTooltip = Update.foldChild({
+  update: Tooltip.update,
+  read: (model: Model) => Option.some(model.tooltip),
+  write: (model, nextTooltip) =>
+    modifyFields(model, { tooltip: () => nextTooltip }),
+  toParentMessage: message => Message.GotTooltipMessage({ message }),
+  foldOutMessage: foldTooltipOutMessage,
+})
+
+const foldLegend = Update.foldChild({
+  update: Popover.update,
+  read: (model: Model) => Option.some(model.legend),
+  write: (model, nextLegend) =>
+    modifyFields(model, { legend: () => nextLegend }),
+  toParentMessage: message => Message.GotLegendMessage({ message }),
+  foldOutMessage: foldLegendOutMessage,
+})
+
+const foldAboutDialog = Update.foldChild({
+  update: Dialog.update,
+  read: (model: Model) => Option.some(model.aboutDialog),
+  write: (model, nextAboutDialog) =>
+    modifyFields(model, { aboutDialog: () => nextAboutDialog }),
+  toParentMessage: message => Message.GotAboutDialogMessage({ message }),
+  foldOutMessage: foldDialogOutMessage,
+})
+
+const foldClearDialog = Update.foldChild({
+  update: Dialog.update,
+  read: (model: Model) => Option.some(model.clearDialog),
+  write: (model, nextClearDialog) =>
+    modifyFields(model, { clearDialog: () => nextClearDialog }),
+  toParentMessage: message => Message.GotClearDialogMessage({ message }),
+  foldOutMessage: foldDialogOutMessage,
+})
+
+const foldAboutDialogOpen = Update.foldChildStep({
+  update: Dialog.open,
+  read: (model: Model) => Option.some(model.aboutDialog),
+  write: (model, nextAboutDialog) =>
+    modifyFields(model, { aboutDialog: () => nextAboutDialog }),
+  toParentMessage: message => Message.GotAboutDialogMessage({ message }),
+  foldOutMessage: foldDialogOutMessage,
+})
+
+const foldClearDialogOpen = Update.foldChildStep({
+  update: Dialog.open,
+  read: (model: Model) => Option.some(model.clearDialog),
+  write: (model, nextClearDialog) =>
+    modifyFields(model, { clearDialog: () => nextClearDialog }),
+  toParentMessage: message => Message.GotClearDialogMessage({ message }),
+  foldOutMessage: foldDialogOutMessage,
+})
+
+const foldClearDialogClose = Update.foldChildStep({
+  update: Dialog.close,
+  read: (model: Model) => Option.some(model.clearDialog),
+  write: (model, nextClearDialog) =>
+    modifyFields(model, { clearDialog: () => nextClearDialog }),
+  toParentMessage: message => Message.GotClearDialogMessage({ message }),
+  foldOutMessage: foldDialogOutMessage,
+})
+
+const foldMenuOutMessage = Menu.OutMessage.match<
+  UpdateStep,
+  Menu.OutMessage<DataItem>
+>({
+  Selected:
+    ({ value }) =>
+    model =>
+      value === 'about'
+        ? foldAboutDialogOpen(model)
+        : foldClearDialogOpen(model),
+})
+
+const foldMenu = Update.foldChild({
+  update: DataMenu.update,
+  read: (model: Model) => Option.some(model.menu),
+  write: (model, nextMenu) => modifyFields(model, { menu: () => nextMenu }),
+  toParentMessage: message => Message.GotMenuMessage({ message }),
+  foldOutMessage: foldMenuOutMessage,
+})
+
 export const update = (model: Model, message: Message) =>
   Message.match<UpdateReturn>(message, {
     SelectedDay: ({ date }) => ({
-      model: modifyFields(model, {
-        selectedDate: () => date,
-        isTooltipOpen: () => false,
-      }),
+      model: modifyFields(model, { selectedDate: () => date }),
     }),
 
-    LoggedFlow: ({ date, flow }) => {
-      const logs = upsertLog(model.logs, date, flow)
+    LoggedFlow: ({ date, flow }) => logFlow(model, date, flow),
 
-      return {
-        model: modifyFields(model, {
-          logs: () => logs,
-          selectedDate: () => date,
-        }),
-        commands: [SaveLogs({ logs })],
-      }
-    },
-
-    ClearedDay: ({ date }) => {
-      const logs = Array.filter(model.logs, log => log.date !== date)
-
-      return {
-        model: modifyFields(model, {
-          logs: () => logs,
-        }),
-        commands: [SaveLogs({ logs })],
-      }
-    },
+    ClearedDay: ({ date }) => clearDay(model, date),
 
     AcknowledgedLate: ({ date }) => ({
       model: modifyFields(model, {
@@ -204,85 +356,22 @@ export const update = (model: Model, message: Message) =>
 
     FailedSaveLogs: () => ({ model }),
 
-    SelectedTab: ({ tab }) => ({
-      model: modifyFields(model, {
-        tab: () => tab,
-        isTooltipOpen: () => false,
-        isLegendOpen: () => false,
-        isMenuOpen: () => false,
-      }),
+    SetPrediction: ({ isPredicting }) => ({
+      model: modifyFields(model, { isPredicting: () => isPredicting }),
     }),
 
-    ToggledPrediction: () => ({
-      model: modifyFields(model, {
-        isPredicting: isPredicting => !isPredicting,
-      }),
-    }),
+    ClearedAllLogs: () =>
+      Update.combine(model, [clearAllLogs, foldClearDialogClose]),
 
-    ShowedTooltip: () => ({
-      model: modifyFields(model, { isTooltipOpen: () => true }),
-    }),
+    OpenedAbout: () => foldAboutDialogOpen(model),
 
-    HidTooltip: () => ({
-      model: modifyFields(model, { isTooltipOpen: () => false }),
-    }),
-
-    OpenedLegend: () => ({
-      model: modifyFields(model, { isLegendOpen: () => true }),
-    }),
-
-    ClosedLegend: () => ({
-      model: modifyFields(model, { isLegendOpen: () => false }),
-    }),
-
-    OpenedMenu: () => ({
-      model: modifyFields(model, {
-        isMenuOpen: () => true,
-        menuIndex: () => 0,
-      }),
-    }),
-
-    ClosedMenu: () => ({
-      model: modifyFields(model, {
-        isMenuOpen: () => false,
-        menuIndex: () => -1,
-      }),
-    }),
-
-    MovedMenuIndex: ({ index }) => ({
-      model: modifyFields(model, { menuIndex: () => index }),
-    }),
-
-    OpenedAbout: () => ({
-      model: modifyFields(model, {
-        isAboutOpen: () => true,
-        isMenuOpen: () => false,
-      }),
-    }),
-
-    ClosedAbout: () => ({
-      model: modifyFields(model, { isAboutOpen: () => false }),
-    }),
-
-    OpenedClearConfirm: () => ({
-      model: modifyFields(model, {
-        isClearOpen: () => true,
-        isMenuOpen: () => false,
-      }),
-    }),
-
-    ClosedClearConfirm: () => ({
-      model: modifyFields(model, { isClearOpen: () => false }),
-    }),
-
-    ClearedAllLogs: () => ({
-      model: modifyFields(model, {
-        logs: () => [],
-        isClearOpen: () => false,
-        isPredicting: () => true,
-      }),
-      commands: [SaveLogs({ logs: [] })],
-    }),
+    GotTabsMessage: ({ message }) => foldTabs(model, message),
+    GotFlowMessage: ({ message }) => foldFlow(model, message),
+    GotTooltipMessage: ({ message }) => foldTooltip(model, message),
+    GotLegendMessage: ({ message }) => foldLegend(model, message),
+    GotMenuMessage: ({ message }) => foldMenu(model, message),
+    GotAboutDialogMessage: ({ message }) => foldAboutDialog(model, message),
+    GotClearDialogMessage: ({ message }) => foldClearDialog(model, message),
   })
 
 // COMMAND
@@ -524,11 +613,8 @@ const confidenceHint = (confidence: string): string =>
     Match.orElse(() => 'A range, not a promise.'),
   )
 
-const tabs: ReadonlyArray<Tabs.TabItem<Tab>> = [
-  { value: 'Today', label: 'Today' },
-  { value: 'History', label: 'History' },
-  { value: 'About', label: 'About' },
-]
+const dataMenuLabel = (item: DataItem): string =>
+  item === 'about' ? 'How this works' : 'Clear all data'
 
 const mastheadView = (model: Model, h: HtmlBuilder<Message>): Html =>
   h.div(
@@ -538,47 +624,21 @@ const mastheadView = (model: Model, h: HtmlBuilder<Message>): Html =>
         [h.Attribute('class', stylex.attrs(styles.wordmark).class ?? '')],
         ['cycle'],
       ),
-      model.tab === 'Today'
-        ? Menu.view(
-            {
-              id: 'data-menu',
-              label: 'Data',
-              isOpen: model.isMenuOpen,
-              activeIndex: model.menuIndex,
-              items: [
-                {
-                  id: 'about',
-                  label: 'How this works',
-                  onSelect: Message.OpenedAbout(),
-                },
-                {
-                  id: 'clear',
-                  label: 'Clear all data',
-                  onSelect: Message.OpenedClearConfirm(),
-                },
-              ],
-              onToggle: model.isMenuOpen
-                ? Message.ClosedMenu()
-                : Message.OpenedMenu(),
-              onClose: Message.ClosedMenu(),
-              onActiveIndex: index => Message.MovedMenuIndex({ index }),
-            },
-            h,
-          )
-        : h.empty,
+      h.submodel({
+        slotId: DATA_MENU_ID,
+        model: model.menu,
+        view: DataMenu.view,
+        viewInputs: Menu.renderConfig<DataItem, Message>(
+          {
+            items: dataItems,
+            label: dataMenuLabel,
+            trigger: 'Data',
+          },
+          h,
+        ),
+        toParentMessage: message => Message.GotMenuMessage({ message }),
+      }),
     ],
-  )
-
-const tabsView = (model: Model, h: HtmlBuilder<Message>): Html =>
-  Tabs.view(
-    {
-      idPrefix: TABS_ID,
-      label: 'Sections',
-      value: model.tab,
-      tabs,
-      onChange: tab => Message.SelectedTab({ tab }),
-    },
-    h,
   )
 
 const statusView = (
@@ -689,17 +749,24 @@ const statusView = (
         [h.Attribute('class', stylex.attrs(styles.detail).class ?? '')],
         [
           h.span([], [`${predicted.text} · `]),
-          Tooltip.view(
-            {
-              id: 'confidence-tooltip',
-              label: `${predicted.confidence.toLowerCase()} estimate`,
-              content: confidenceHint(predicted.confidence),
-              isVisible: model.isTooltipOpen,
-              onShow: Message.ShowedTooltip(),
-              onHide: Message.HidTooltip(),
+          h.submodel({
+            slotId: TOOLTIP_ID,
+            model: model.tooltip,
+            view: Tooltip.view,
+            viewInputs: {
+              anchor: { placement: 'top', gap: 6, padding: 8 },
+              toView: info =>
+                Tooltip.render(
+                  info,
+                  {
+                    label: `${predicted.confidence.toLowerCase()} estimate`,
+                    content: confidenceHint(predicted.confidence),
+                  },
+                  h,
+                ),
             },
-            h,
-          ),
+            toParentMessage: message => Message.GotTooltipMessage({ message }),
+          }),
         ],
       ),
     ],
@@ -732,7 +799,7 @@ const overdueView = (
                   `${plural(daysLate, 'day', 'days')} later than usual. That happens. Two likely reasons: a period you did not log, or a late one.`,
                 ],
               ),
-              Button.view(
+              Button.render(
                 {
                   label: 'It is just late',
                   onClick: Message.AcknowledgedLate({ date: model.today }),
@@ -828,6 +895,10 @@ const dayGridView = (model: Model, h: HtmlBuilder<Message>): Html =>
 const flowEditorView = (model: Model, h: HtmlBuilder<Message>): Html => {
   const maybeSelected = parseDayNumber(model.selectedDate)
   const currentFlow = flowOn(model.logs, model.selectedDate)
+  const choice: FlowChoice = Option.match(currentFlow, {
+    onNone: () => 'None',
+    onSome: flow => flow,
+  })
 
   return Option.match(maybeSelected, {
     onNone: () => h.empty,
@@ -860,30 +931,25 @@ const flowEditorView = (model: Model, h: HtmlBuilder<Message>): Html => {
               ),
             ],
           ),
-          ToggleGroup.view<FlowChoice, Message>(
-            {
-              label: 'Flow',
-              value: Option.getOrElse(
-                Option.map(currentFlow, (flow): FlowChoice => flow),
-                () => 'None' as const,
-              ),
+          h.submodel({
+            slotId: FLOW_ID,
+            model: model.flow,
+            view: FlowGroup.view,
+            viewInputs: {
               options: flowChoices,
-              onChange: choice =>
-                choice === 'None'
-                  ? Message.ClearedDay({ date: model.selectedDate })
-                  : Message.LoggedFlow({
-                      date: model.selectedDate,
-                      flow: choice,
-                    }),
+              selectedValue: Option.some(choice),
+              ariaLabel: 'Flow',
+              orientation: 'Horizontal',
+              toView: info => RadioGroup.render(info, value => value, h),
             },
-            h,
-          ),
+            toParentMessage: message => Message.GotFlowMessage({ message }),
+          }),
         ],
       ),
   })
 }
 
-const legendView = (h: HtmlBuilder<Message>): Html =>
+const legendContent = (h: HtmlBuilder<Message>): Html =>
   h.div(
     [h.Attribute('class', stylex.attrs(styles.legend).class ?? '')],
     [
@@ -920,20 +986,22 @@ const legendView = (h: HtmlBuilder<Message>): Html =>
     ],
   )
 
-const legendViewWithPopover = (model: Model, h: HtmlBuilder<Message>): Html =>
-  Popover.view(
-    {
-      id: 'legend',
-      label: 'what the marks mean',
-      isOpen: model.isLegendOpen,
-      onToggle: model.isLegendOpen
-        ? Message.ClosedLegend()
-        : Message.OpenedLegend(),
-      onClose: Message.ClosedLegend(),
-      children: [legendView(h)],
+const legendView = (model: Model, h: HtmlBuilder<Message>): Html =>
+  h.submodel({
+    slotId: LEGEND_ID,
+    model: model.legend,
+    view: Popover.view,
+    viewInputs: {
+      anchor: { placement: 'bottom-start', gap: 8, padding: 8 },
+      toView: info =>
+        Popover.render(
+          info,
+          { label: 'what the marks mean', children: legendContent(h) },
+          h,
+        ),
     },
-    h,
-  )
+    toParentMessage: message => Message.GotLegendMessage({ message }),
+  })
 
 const todayView = (
   model: Model,
@@ -947,7 +1015,7 @@ const todayView = (
       dayGridView(model, h),
       flowEditorView(model, h),
       overdueView(model, periods, h),
-      legendViewWithPopover(model, h),
+      legendView(model, h),
     ],
   )
 
@@ -1048,11 +1116,12 @@ const aboutView = (model: Model, h: HtmlBuilder<Message>): Html =>
   h.div(
     [h.Attribute('class', stylex.attrs(styles.section).class ?? '')],
     [
-      Switch.view(
+      Switch.render(
         {
+          id: PREDICTION_SWITCH_ID,
           label: 'Prediction',
-          checked: model.isPredicting,
-          onToggle: Message.ToggledPrediction(),
+          isChecked: model.isPredicting,
+          onToggle: isPredicting => Message.SetPrediction({ isPredicting }),
         },
         h,
       ),
@@ -1084,7 +1153,7 @@ const aboutView = (model: Model, h: HtmlBuilder<Message>): Html =>
           ),
         ],
       ),
-      Button.view(
+      Button.render(
         {
           label: 'How the range is calculated',
           onClick: Message.OpenedAbout(),
@@ -1092,113 +1161,126 @@ const aboutView = (model: Model, h: HtmlBuilder<Message>): Html =>
         },
         h,
       ),
-      Menu.view(
-        {
-          id: 'about-menu',
-          label: 'Data',
-          isOpen: model.isMenuOpen,
-          activeIndex: model.menuIndex,
-          items: [
-            {
-              id: 'about',
-              label: 'How this works',
-              onSelect: Message.OpenedAbout(),
-            },
-            {
-              id: 'clear',
-              label: 'Clear all data',
-              onSelect: Message.OpenedClearConfirm(),
-            },
-          ],
-          onToggle: model.isMenuOpen
-            ? Message.ClosedMenu()
-            : Message.OpenedMenu(),
-          onClose: Message.ClosedMenu(),
-          onActiveIndex: index => Message.MovedMenuIndex({ index }),
-        },
-        h,
-      ),
     ],
   )
 
-const aboutDialogView = (model: Model, h: HtmlBuilder<Message>): Html =>
-  model.isAboutOpen
-    ? Dialog.view(
-        {
-          id: 'about-dialog',
-          title: 'How the range is calculated',
-          children: [
-            h.p(
-              [],
-              [
-                'The centre is the median of your last six cycle lengths, not the average. One unusual cycle moves a median much less.',
-              ],
-            ),
-            h.p(
-              [],
-              [
-                'The width comes from your own spread, with a floor because a handful of cycles always looks more regular than it is. The window is roughly an 80% band, rounded outward to whole days.',
-              ],
-            ),
-            h.p(
-              [],
-              [
-                'While the cycle is running, the estimate is conditioned on it not having started yet, so it slides forward by less than a day for each late day instead of freezing.',
-              ],
-            ),
-            h.p(
-              [],
-              [
-                'Past the window it stops predicting and asks whether you missed a log.',
-              ],
-            ),
-          ],
-          onClose: Message.ClosedAbout(),
-        },
-        h,
-      )
-    : h.empty
-
-const clearDialogView = (model: Model, h: HtmlBuilder<Message>): Html =>
-  model.isClearOpen
-    ? Dialog.view(
-        {
-          id: 'clear-dialog',
-          title: 'Clear all data?',
-          children: [
-            h.p(
-              [],
-              [
-                'This deletes every logged day from this device. It cannot be undone.',
-              ],
-            ),
-            h.p(
-              [h.Attribute('class', stylex.attrs(styles.quiet).class ?? '')],
-              [`${plural(model.logs.length, 'day', 'days')} logged right now.`],
-            ),
-            Button.view(
-              {
-                label: 'Clear everything',
-                onClick: Message.ClearedAllLogs(),
-              },
-              h,
-            ),
-          ],
-          onClose: Message.ClosedClearConfirm(),
-        },
-        h,
-      )
-    : h.empty
-
-export const view = (model: Model, h: HtmlBuilder<Message>): Document => {
-  const periods = periodsFrom(model.logs)
-
-  const content = Match.value(model.tab).pipe(
+const tabContent = (
+  tab: Tab,
+  model: Model,
+  periods: ReadonlyArray<Period>,
+  h: HtmlBuilder<Message>,
+): Html =>
+  Match.value(tab).pipe(
     Match.when('Today', () => todayView(model, periods, h)),
     Match.when('History', () => historyView(periods, h)),
     Match.when('About', () => aboutView(model, h)),
     Match.exhaustive,
   )
+
+const tabsView = (
+  model: Model,
+  periods: ReadonlyArray<Period>,
+  h: HtmlBuilder<Message>,
+): Html =>
+  h.submodel({
+    slotId: TABS_ID,
+    model: model.tabs,
+    view: CycleTabs.view,
+    viewInputs: {
+      tabs,
+      selectedValue: model.tab,
+      ariaLabel: 'Sections',
+      toView: info =>
+        Tabs.render(info, tab => tabContent(tab, model, periods, h), h),
+    },
+    toParentMessage: message => Message.GotTabsMessage({ message }),
+  })
+
+const aboutDialogView = (model: Model, h: HtmlBuilder<Message>): Html =>
+  h.submodel({
+    slotId: ABOUT_DIALOG_ID,
+    model: model.aboutDialog,
+    view: Dialog.view,
+    viewInputs: {
+      toView: info =>
+        Dialog.render(
+          info,
+          {
+            title: 'How the range is calculated',
+            children: [
+              h.p(
+                [],
+                [
+                  'The centre is the median of your last six cycle lengths, not the average. One unusual cycle moves a median much less.',
+                ],
+              ),
+              h.p(
+                [],
+                [
+                  'The width comes from your own spread, with a floor because a handful of cycles always looks more regular than it is. The window is roughly an 80% band, rounded outward to whole days.',
+                ],
+              ),
+              h.p(
+                [],
+                [
+                  'While the cycle is running, the estimate is conditioned on it not having started yet, so it slides forward by less than a day for each late day instead of freezing.',
+                ],
+              ),
+              h.p(
+                [],
+                [
+                  'Past the window it stops predicting and asks whether you missed a log.',
+                ],
+              ),
+            ],
+          },
+          h,
+        ),
+    },
+    toParentMessage: message => Message.GotAboutDialogMessage({ message }),
+  })
+
+const clearDialogView = (model: Model, h: HtmlBuilder<Message>): Html =>
+  h.submodel({
+    slotId: CLEAR_DIALOG_ID,
+    model: model.clearDialog,
+    view: Dialog.view,
+    viewInputs: {
+      toView: info =>
+        Dialog.render(
+          info,
+          {
+            title: 'Clear all data?',
+            children: [
+              h.p(
+                [],
+                [
+                  'This deletes every logged day from this device. It cannot be undone.',
+                ],
+              ),
+              h.p(
+                [h.Attribute('class', stylex.attrs(styles.quiet).class ?? '')],
+                [
+                  `${plural(model.logs.length, 'day', 'days')} logged right now.`,
+                ],
+              ),
+              Button.render(
+                {
+                  label: 'Clear everything',
+                  onClick: Message.ClearedAllLogs(),
+                },
+                h,
+              ),
+            ],
+          },
+          h,
+        ),
+    },
+    toParentMessage: message => Message.GotClearDialogMessage({ message }),
+  })
+
+export const view = (model: Model, h: HtmlBuilder<Message>): Document => {
+  const periods = periodsFrom(model.logs)
 
   const body = h.div(
     [h.Attribute('class', stylex.attrs(styles.page).class ?? '')],
@@ -1207,16 +1289,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => {
         [h.Attribute('class', stylex.attrs(styles.column).class ?? '')],
         [
           mastheadView(model, h),
-          tabsView(model, h),
-          Tabs.panel(
-            {
-              idPrefix: TABS_ID,
-              value: model.tab,
-              current: model.tab,
-              children: [content],
-            },
-            h,
-          ),
+          tabsView(model, periods, h),
           aboutDialogView(model, h),
           clearDialogView(model, h),
         ],

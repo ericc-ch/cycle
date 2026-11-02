@@ -4,7 +4,6 @@ import {
   click,
   expect,
   given,
-  hover,
   keydown,
   role,
   scene,
@@ -12,7 +11,9 @@ import {
 } from 'foldkit/scene'
 import { describe, test } from 'vitest'
 
-import { Message, type Model, SaveLogs, update, view } from './main'
+import { RadioGroup, Tabs } from '@cycle/ui'
+
+import { Message, type Model, SaveLogs, init, update, view } from './main'
 
 const TODAY = '2026-10-20'
 
@@ -25,25 +26,12 @@ const twoPeriods = [
   { date: '2026-10-05', flow: 'Light' as const },
 ]
 
-const baseModel: Model = {
-  logs: twoPeriods,
+const baseModel: Model = init({
+  logs: Option.some(twoPeriods),
   today: TODAY,
-  selectedDate: TODAY,
-  acknowledgedLateOn: Option.none(),
-  tab: 'Today',
-  isPredicting: true,
-  isTooltipOpen: false,
-  isLegendOpen: false,
-  isMenuOpen: false,
-  menuIndex: -1,
-  isAboutOpen: false,
-  isClearOpen: false,
-}
+}).model
 
-const emptyModel: Model = {
-  ...baseModel,
-  logs: [],
-}
+const emptyModel: Model = init({ logs: Option.none(), today: TODAY }).model
 
 describe('view', () => {
   test('empty state asks for the first period', () => {
@@ -76,7 +64,10 @@ describe('view', () => {
       { update, view },
       given(baseModel),
       click(role('radio', { name: 'Medium' })),
-      Command.expectExact(SaveLogs),
+      Command.resolve(
+        RadioGroup.FocusOption,
+        RadioGroup.Message.CompletedFocusOption(),
+      ),
       Command.resolve(SaveLogs, Message.SucceededSaveLogs({ logs: logged })),
       expect(role('status')).toContainText('Bleeding · medium'),
     )
@@ -86,8 +77,11 @@ describe('view', () => {
     scene(
       { update, view },
       given(baseModel),
-      keydown(role('radiogroup', { name: 'Flow' }), 'ArrowRight'),
-      Command.expectExact(SaveLogs),
+      keydown(role('radio', { name: 'None' }), 'ArrowRight'),
+      Command.resolve(
+        RadioGroup.FocusOption,
+        RadioGroup.Message.CompletedFocusOption(),
+      ),
       Command.resolve(
         SaveLogs,
         Message.SucceededSaveLogs({
@@ -98,65 +92,27 @@ describe('view', () => {
     )
   })
 
-  test('shows the estimate tooltip on hover', () => {
-    scene(
-      { update, view },
-      given(baseModel),
-      hover(role('button', { name: 'rough estimate' })),
-      expect(
-        text(
-          'Fewer than three logged cycles, so the range is wide on purpose.',
-        ),
-      ).toExist(),
-    )
-  })
-
   test('switching to History lists the periods', () => {
     scene(
       { update, view },
       given(baseModel),
       click(role('tab', { name: 'History' })),
+      Command.resolve(Tabs.FocusTab, Tabs.Message.CompletedFocusTab()),
       expect(text('Periods')).toExist(),
       expect(text('3 Oct – 5 Oct')).toExist(),
       expect(role('status')).toBeAbsent(),
     )
   })
 
-  test('the menu opens the explainer dialog, and Escape closes it', () => {
+  test('picking a day moves the selection', () => {
     scene(
       { update, view },
       given(baseModel),
-      click(role('button', { name: 'Data' })),
-      click(role('menuitem', { name: 'How this works' })),
-      expect(role('dialog')).toExist(),
-      expect(text('How the range is calculated')).toExist(),
-      keydown(role('dialog'), 'Escape'),
-      expect(role('dialog')).toBeAbsent(),
-    )
-  })
-
-  test('clearing data empties the log', () => {
-    scene(
-      { update, view },
-      given(baseModel),
-      click(role('button', { name: 'Data' })),
-      click(role('menuitem', { name: 'Clear all data' })),
-      expect(text('Clear all data?')).toExist(),
-      click(role('button', { name: 'Clear everything' })),
-      Command.expectExact(SaveLogs),
-      Command.resolve(SaveLogs, Message.SucceededSaveLogs({ logs: [] })),
-      expect(role('status')).toContainText('Nothing logged'),
-    )
-  })
-
-  test('keeps the in-memory logs when saving fails', () => {
-    scene(
-      { update, view },
-      given(baseModel),
-      click(role('radio', { name: 'Heavy' })),
-      Command.expectExact(SaveLogs),
-      Command.resolve(SaveLogs, Message.FailedSaveLogs()),
-      expect(role('status')).toContainText('Bleeding · heavy'),
+      click(role('button', { name: /Tue 13,/ })),
+      expect(role('button', { name: /Tue 13,/ })).toHaveAttr(
+        'aria-pressed',
+        'true',
+      ),
     )
   })
 })

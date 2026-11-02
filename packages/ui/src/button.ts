@@ -1,8 +1,11 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
 
+import { type ButtonAttributes, view } from '@foldkit/ui/button'
 import * as stylex from '@stylexjs/stylex'
 
 import { font, palette, space, typeScale } from './tokens.stylex.js'
+
+export * from '@foldkit/ui/button'
 
 const styles = stylex.create({
   base: {
@@ -25,11 +28,6 @@ const styles = stylex.create({
       outlineColor: palette.fg0,
       outlineOffset: '2px',
     },
-    ':disabled': {
-      color: palette.fg2,
-      cursor: 'default',
-      textDecorationColor: 'transparent',
-    },
   },
   quiet: {
     color: palette.fg1,
@@ -38,51 +36,51 @@ const styles = stylex.create({
     textDecorationLine: 'none',
   },
   square: {
-    padding: `${space.xs} ${space.sm}`,
-    borderWidth: '1px',
-    borderStyle: 'solid',
-    borderColor: palette.line,
-    textDecorationLine: 'none',
+    padding: space.xs,
+    paddingInline: space.sm,
+  },
+  disabled: {
+    color: palette.fg2,
+    cursor: 'default',
+    textDecorationColor: 'transparent',
   },
 })
 
-export type ButtonVariant = 'plain' | 'quiet' | 'bare' | 'square'
+export type Variant = 'plain' | 'quiet' | 'bare' | 'square'
 
-export type ButtonProps<Message> = {
-  readonly label: string
-  readonly onClick: Message
-  readonly variant?: ButtonVariant
-  readonly disabled?: boolean
-  readonly type?: 'button' | 'submit'
-  readonly ariaLabel?: string
-}
+export type RenderConfig<Message> = Readonly<{
+  label: string
+  onClick?: Message
+  variant?: Variant
+  isDisabled?: boolean
+}>
 
-const variantStyle = (variant: ButtonVariant | undefined) => {
-  if (variant === 'quiet') {
-    return styles.quiet
-  }
-
-  if (variant === 'bare') {
-    return styles.bare
-  }
-
-  return variant === 'square' ? styles.square : false
-}
-
-export const view = <Message>(
-  props: ButtonProps<Message>,
+/** A text-first button: underlined by default, no fill, no radius. */
+export const render = <Message>(
+  config: RenderConfig<Message>,
   h: HtmlBuilder<Message>,
-): Html => {
-  const className = stylex.attrs(styles.base, variantStyle(props.variant)).class
-
-  return h.button(
-    [
-      h.Type(props.type ?? 'button'),
-      h.Disabled(props.disabled ?? false),
-      h.OnClick(props.onClick),
-      h.Attribute('class', className ?? ''),
-      ...(props.ariaLabel === undefined ? [] : [h.AriaLabel(props.ariaLabel)]),
-    ],
-    [props.label],
+): Html =>
+  view(
+    {
+      ...(config.onClick === undefined ? {} : { onClick: config.onClick }),
+      isDisabled: config.isDisabled ?? false,
+      toView: (attributes: ButtonAttributes<Message>) =>
+        h.button(
+          [
+            ...attributes.button,
+            h.Attribute(
+              'class',
+              stylex.attrs(
+                styles.base,
+                config.variant === 'quiet' && styles.quiet,
+                config.variant === 'bare' && styles.bare,
+                config.variant === 'square' && styles.square,
+                config.isDisabled === true && styles.disabled,
+              ).class ?? '',
+            ),
+          ],
+          [config.label],
+        ),
+    },
+    h,
   )
-}

@@ -13,13 +13,16 @@ export default defineConfig({
       unstable_moduleResolution: { type: 'commonJS', rootDir },
     }),
   ],
+  resolve: {
+    dedupe: ['foldkit', '@foldkit/ui', 'effect'],
+  },
   test: {
     include: ['apps/**/*.test.ts', 'packages/**/*.test.ts'],
     environment: 'happy-dom',
     setupFiles: ['./vitest-setup.ts'],
     server: {
       deps: {
-        inline: ['foldkit', '@cycle/ui', '@cycle/domain'],
+        inline: ['foldkit', '@foldkit/ui', '@cycle/ui', '@cycle/domain'],
       },
     },
   },

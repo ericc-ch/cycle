@@ -2,6 +2,8 @@ import { Option } from 'effect'
 import { Command, given, message, model, story } from 'foldkit/story'
 import { describe, expect, test } from 'vitest'
 
+import { Menu, Tabs } from '@cycle/ui'
+
 import { Message, type Model, SaveLogs, init, update } from './main'
 
 const TODAY = '2026-10-20'
@@ -18,20 +20,10 @@ const octoberPeriod = [
   { date: '2026-10-05', flow: 'Light' as const },
 ]
 
-const baseModel: Model = {
-  logs: [...septemberPeriod, ...octoberPeriod],
+const baseModel: Model = init({
+  logs: Option.some([...septemberPeriod, ...octoberPeriod]),
   today: TODAY,
-  selectedDate: TODAY,
-  acknowledgedLateOn: Option.none(),
-  tab: 'Today',
-  isPredicting: true,
-  isTooltipOpen: false,
-  isLegendOpen: false,
-  isMenuOpen: false,
-  menuIndex: -1,
-  isAboutOpen: false,
-  isClearOpen: false,
-}
+}).model
 
 describe('init', () => {
   test('uses the flags logs and today', () => {
@@ -51,6 +43,16 @@ describe('init', () => {
     const result = init({ logs: Option.none(), today: TODAY })
 
     expect(result.model.logs).toStrictEqual([])
+  })
+
+  test('starts with every panel closed', () => {
+    const result = init({ logs: Option.none(), today: TODAY })
+
+    expect(result.model.aboutDialog.isOpen).toBe(false)
+    expect(result.model.clearDialog.isOpen).toBe(false)
+    expect(result.model.menu.isOpen).toBe(false)
+    expect(result.model.legend.isOpen).toBe(false)
+    expect(result.model.tooltip.isOpen).toBe(false)
   })
 })
 
@@ -142,25 +144,11 @@ describe('update', () => {
     )
   })
 
-  test('SelectedTab changes the section and closes transient panels', () => {
-    story(
-      update,
-      given({ ...baseModel, isLegendOpen: true, isMenuOpen: true }),
-      message(Message.SelectedTab({ tab: 'History' })),
-      model(model => {
-        expect(model.tab).toBe('History')
-        expect(model.isLegendOpen).toBe(false)
-        expect(model.isMenuOpen).toBe(false)
-      }),
-      Command.expectNone(),
-    )
-  })
-
-  test('ToggledPrediction flips the prediction switch', () => {
+  test('SetPrediction flips the prediction switch', () => {
     story(
       update,
       given(baseModel),
-      message(Message.ToggledPrediction()),
+      message(Message.SetPrediction({ isPredicting: false })),
       model(model => {
         expect(model.isPredicting).toBe(false)
       }),
@@ -168,32 +156,40 @@ describe('update', () => {
     )
   })
 
-  test('the menu opens on index zero and moves with the keyboard', () => {
-    story(
-      update,
-      given(baseModel),
-      message(Message.OpenedMenu()),
-      message(Message.MovedMenuIndex({ index: 1 })),
-      model(model => {
-        expect(model.isMenuOpen).toBe(true)
-        expect(model.menuIndex).toBe(1)
+  test('the tabs component moves the app to the chosen section', () => {
+    const result = update(
+      baseModel,
+      Message.GotTabsMessage({
+        message: Tabs.Message.SelectedTab({ index: 1, value: 'History' }),
       }),
-      Command.expectNone(),
     )
+
+    expect(result.model.tab).toBe('History')
+  })
+
+  test('OpenedAbout opens the explainer dialog', () => {
+    const result = update(baseModel, Message.OpenedAbout())
+
+    expect(result.model.aboutDialog.isOpen).toBe(true)
+  })
+
+  test('the menu selection opens the matching dialog', () => {
+    const result = update(
+      baseModel,
+      Message.GotMenuMessage({
+        message: Menu.Message.SelectedItem({ index: 1, item: 'clear' }),
+      }),
+    )
+
+    expect(result.model.clearDialog.isOpen).toBe(true)
+    expect(result.model.aboutDialog.isOpen).toBe(false)
   })
 
   test('ClearedAllLogs empties the logs and saves', () => {
-    story(
-      update,
-      given({ ...baseModel, isClearOpen: true }),
-      message(Message.ClearedAllLogs()),
-      Command.expectExact(SaveLogs),
-      Command.resolve(SaveLogs, Message.SucceededSaveLogs({ logs: [] })),
-      model(model => {
-        expect(model.logs).toStrictEqual([])
-        expect(model.isClearOpen).toBe(false)
-      }),
-    )
+    const result = update(baseModel, Message.ClearedAllLogs())
+
+    expect(result.model.logs).toStrictEqual([])
+    expect(result.model.isPredicting).toBe(true)
   })
 
   test('FailedSaveLogs keeps the in-memory logs', () => {

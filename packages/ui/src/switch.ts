@@ -1,8 +1,11 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
 
+import { view } from '@foldkit/ui/switch'
 import * as stylex from '@stylexjs/stylex'
 
 import { font, palette, space, typeScale } from './tokens.stylex.js'
+
+export * from '@foldkit/ui/switch'
 
 const styles = stylex.create({
   root: {
@@ -12,16 +15,7 @@ const styles = stylex.create({
     fontFamily: font.sans,
     fontSize: typeScale.base,
     color: palette.fg0,
-    backgroundColor: 'transparent',
-    borderWidth: 0,
-    padding: 0,
     cursor: 'pointer',
-    ':focus-visible': {
-      outlineWidth: '2px',
-      outlineStyle: 'solid',
-      outlineColor: palette.fg0,
-      outlineOffset: '2px',
-    },
   },
   track: {
     position: 'relative',
@@ -33,6 +27,14 @@ const styles = stylex.create({
     borderStyle: 'solid',
     borderColor: palette.fg1,
     backgroundColor: 'transparent',
+    padding: 0,
+    cursor: 'pointer',
+    ':focus-visible': {
+      outlineWidth: '2px',
+      outlineStyle: 'solid',
+      outlineColor: palette.fg0,
+      outlineOffset: '2px',
+    },
   },
   thumb: {
     width: '8px',
@@ -45,6 +47,9 @@ const styles = stylex.create({
     marginInlineEnd: '4px',
     backgroundColor: palette.fg0,
   },
+  label: {
+    cursor: 'pointer',
+  },
   state: {
     fontFamily: font.mono,
     fontSize: typeScale.sm,
@@ -52,41 +57,56 @@ const styles = stylex.create({
   },
 })
 
-export type SwitchProps<Message> = {
-  readonly label: string
-  readonly checked: boolean
-  readonly onToggle: Message
-}
+export type RenderConfig<Message> = Readonly<{
+  id: string
+  label: string
+  isChecked: boolean
+  onToggle: (isChecked: boolean) => Message
+}>
 
-export const view = <Message>(
-  props: SwitchProps<Message>,
+export const render = <Message>(
+  config: RenderConfig<Message>,
   h: HtmlBuilder<Message>,
 ): Html =>
-  h.button(
-    [
-      h.Type('button'),
-      h.Role('switch'),
-      h.AriaChecked(props.checked),
-      h.OnClick(props.onToggle),
-      h.Attribute('class', stylex.attrs(styles.root).class ?? ''),
-    ],
-    [
-      h.span(
-        [h.Attribute('class', stylex.attrs(styles.track).class ?? '')],
-        [
-          h.span([
-            h.Attribute(
-              'class',
-              stylex.attrs(styles.thumb, props.checked && styles.thumbOn)
-                .class ?? '',
+  view(
+    {
+      id: config.id,
+      isChecked: config.isChecked,
+      onToggle: config.onToggle,
+      toView: attributes =>
+        h.div(
+          [h.Attribute('class', stylex.attrs(styles.root).class ?? '')],
+          [
+            h.button(
+              [
+                ...attributes.button,
+                h.Attribute('class', stylex.attrs(styles.track).class ?? ''),
+              ],
+              [
+                h.span([
+                  h.Attribute(
+                    'class',
+                    stylex.attrs(
+                      styles.thumb,
+                      config.isChecked && styles.thumbOn,
+                    ).class ?? '',
+                  ),
+                ]),
+              ],
             ),
-          ]),
-        ],
-      ),
-      h.span([], [props.label]),
-      h.span(
-        [h.Attribute('class', stylex.attrs(styles.state).class ?? '')],
-        [props.checked ? 'on' : 'off'],
-      ),
-    ],
+            h.label(
+              [
+                ...attributes.label,
+                h.Attribute('class', stylex.attrs(styles.label).class ?? ''),
+              ],
+              [config.label],
+            ),
+            h.span(
+              [h.Attribute('class', stylex.attrs(styles.state).class ?? '')],
+              [config.isChecked ? 'on' : 'off'],
+            ),
+          ],
+        ),
+    },
+    h,
   )

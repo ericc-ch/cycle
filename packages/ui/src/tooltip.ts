@@ -1,9 +1,11 @@
-import { Option } from 'effect'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 
+import type { RenderInfo } from '@foldkit/ui/tooltip'
 import * as stylex from '@stylexjs/stylex'
 
 import { font, palette, space, typeScale } from './tokens.stylex.js'
+
+export * from '@foldkit/ui/tooltip'
 
 const styles = stylex.create({
   wrapper: {
@@ -31,13 +33,10 @@ const styles = stylex.create({
     },
   },
   bubble: {
-    position: 'absolute',
-    top: '100%',
-    insetInlineStart: 0,
     zIndex: 30,
-    marginTop: space.sm,
     maxWidth: '32ch',
-    padding: `${space.sm} ${space.md}`,
+    padding: space.sm,
+    paddingInline: space.md,
     borderWidth: '1px',
     borderStyle: 'solid',
     borderColor: palette.line,
@@ -49,17 +48,15 @@ const styles = stylex.create({
   },
 })
 
-export type TooltipProps<Message> = {
-  readonly id: string
-  readonly label: string
-  readonly content: string
-  readonly isVisible: boolean
-  readonly onShow: Message
-  readonly onHide: Message
-}
+export type RenderConfig = Readonly<{
+  label: string
+  content: string
+}>
 
-export const view = <Message>(
-  props: TooltipProps<Message>,
+/** A dotted-underline trigger with a short grey explanation anchored to it. */
+export const render = <Message>(
+  info: RenderInfo,
+  config: RenderConfig,
   h: HtmlBuilder<Message>,
 ): Html =>
   h.span(
@@ -67,28 +64,21 @@ export const view = <Message>(
     [
       h.button(
         [
-          h.Type('button'),
+          ...info.trigger,
           h.Attribute('class', stylex.attrs(styles.trigger).class ?? ''),
-          h.AriaDescribedBy(props.isVisible ? props.id : ''),
-          h.OnMouseEnter(props.onShow),
-          h.OnMouseLeave(props.onHide),
-          h.OnFocus(props.onShow),
-          h.OnBlur(props.onHide),
-          h.OnKeyDownPreventDefault(key =>
-            key === 'Escape' ? Option.some(props.onHide) : Option.none(),
-          ),
         ],
-        [props.label],
+        [config.label],
       ),
-      props.isVisible
-        ? h.span(
-            [
-              h.Role('tooltip'),
-              h.Id(props.id),
-              h.Attribute('class', stylex.attrs(styles.bubble).class ?? ''),
-            ],
-            [props.content],
-          )
-        : h.empty,
+      ...(info.isVisible
+        ? [
+            h.div(
+              [
+                ...info.panel,
+                h.Attribute('class', stylex.attrs(styles.bubble).class ?? ''),
+              ],
+              [config.content],
+            ),
+          ]
+        : []),
     ],
   )

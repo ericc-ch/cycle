@@ -74,7 +74,7 @@ Underneath, the interesting number is what happens while a cycle is open: at the
 apps/web/              the Vite app: runtime boot, Model/Message/update/view
 apps/web/src/theme.css design tokens: light-dark() colours, fonts, base styles
 packages/domain/       date keys, period grouping, predictor, scoring
-packages/ui/           StyleX components ported to Foldkit (see its README)
+packages/ui/           the styled layer over @foldkit/ui (see its README)
 ```
 
 `packages/domain` has no Foldkit or DOM dependency, so the scoring CLI and the app run the exact same estimator.
@@ -85,4 +85,4 @@ Monochrome and typographic, borrowed from [my site](https://github.com/ericc-ch/
 
 There is no accent colour. Flow is encoded in ink: spotting is a hairline, light and medium are mid greys, heavy is full foreground. State lives in text, never in colour alone.
 
-Component behaviour is hand-written against the React Aria and Base UI contracts, and recorded in `packages/ui/NOTICE`.
+Behaviour comes from [@foldkit/ui](https://foldkit.dev/ui/overview): the ARIA roles, keyboard handling, focus management and submodel state are the library's. `packages/ui` only supplies the markup and the StyleX styles each component renders through its `toView` hook.

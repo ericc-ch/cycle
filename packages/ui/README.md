@@ -1,45 +1,43 @@
 # @cycle/ui
 
-Styled Foldkit components for `cycle`, in the shape shadcn uses: the components live here, the app composes them, and the styles come from this package rather than from call sites.
+The styled layer over [`@foldkit/ui`](https://foldkit.dev/ui/overview), plus the StyleX design tokens.
 
-Styling is StyleX. Values come from `src/tokens.stylex.js`, which maps the design tokens in `apps/web/src/theme.css` (the `light-dark()` pairs) into StyleX variables. A component never hard-codes a colour or a font.
+`@foldkit/ui` owns the behaviour: ARIA roles, keyboard navigation, focus management, and the submodel state for Tabs, RadioGroup, Menu, Popover, Tooltip and Dialog. This package owns the markup and the styles, supplied through each component's `toView` hook.
+
+That split is the reason there is no state here. The app stores each submodel in its own Model and drives it with `h.submodel` and `Update.foldChild`. Nothing in this package holds a flag.
 
 ## What is here
 
-| Component     | Semantics                             | Keyboard                                               |
-| ------------- | ------------------------------------- | ------------------------------------------------------ |
-| `Button`      | native `button`, variants             | Enter, Space                                           |
-| `ToggleGroup` | `radiogroup` + `radio`                | arrows move and select, Home/End, roving tabindex      |
-| `Tabs`        | `tablist` + `tab` + `tabpanel`        | arrows move and select, Home/End, roving tabindex      |
-| `Switch`      | `switch` with `aria-checked`          | Enter, Space                                           |
-| `Tooltip`     | `role="tooltip"` + `aria-describedby` | shows on hover and focus, Escape hides                 |
-| `Popover`     | `aria-expanded`/`aria-controls`       | Escape closes, outside click closes, focus moves in    |
-| `Menu`        | `menu` + `menuitem`                   | arrows, Home/End, Enter/Space select, Escape/Tab close |
-| `Dialog`      | `role="dialog"`, `aria-modal`         | Escape closes, scrim click closes, focus moves in      |
+Each module re-exports the headless module it wraps, so the app imports state and rendering from one place:
 
-Every component is a plain function: `view(props, h) => Html`. There is no submodel, no state machine and no hidden state. The app owns the open/closed flag, the selected index and the message to dispatch, which keeps the whole interaction testable from `story` and `scene` tests.
+| Module        | Styled export                       | Wraps                    |
+| ------------- | ----------------------------------- | ------------------------ |
+| `button`      | `Button.render`                     | `@foldkit/ui/button`     |
+| `switch`      | `Switch.render`                     | `@foldkit/ui/switch`     |
+| `tabs`        | `Tabs.render(info, panel, h)`       | `@foldkit/ui/tabs`       |
+| `radio-group` | `RadioGroup.render(info, label, h)` | `@foldkit/ui/radioGroup` |
+| `tooltip`     | `Tooltip.render(info, config, h)`   | `@foldkit/ui/tooltip`    |
+| `popover`     | `Popover.render(info, config, h)`   | `@foldkit/ui/popover`    |
+| `dialog`      | `Dialog.render(info, config, h)`    | `@foldkit/ui/dialog`     |
+| `menu`        | `Menu.renderConfig(config, h)`      | `@foldkit/ui/menu`       |
 
-## Provenance
+The `render` functions take the `RenderInfo` the library publishes and return the element tree. The app passes them in as `viewInputs.toView` (Tabs, RadioGroup, Tooltip, Popover, Dialog) or as the class names in the Menu's view inputs.
 
-The components were written for this repo. What was taken from elsewhere is the **behaviour contract**: the ARIA roles, the keyboard model, where focus goes, and what a screen reader announces. That contract follows:
+`src/tokens.stylex.js` maps the design tokens in `apps/web/src/theme.css` into StyleX variables. A component never hard-codes a colour, font or spacing value.
 
-- [React Aria](https://react-spectrum.adobe.com/react-aria/) — Apache-2.0
-- [Base UI](https://base-ui.com/) — MIT
-- [WAI-ARIA Authoring Practices](https://www.w3.org/WAI/ARIA/apg/) — W3C
+## The one-instance rule
 
-No React source was copied, so neither licence is triggered by this code. The notices are kept in [`NOTICE`](./NOTICE) because the components are adaptations of those designs, and because a future change may well copy a snippet.
+`@foldkit/ui` must see the same `foldkit` copy as the app, or its brand checks fail at render time with `foldkit was loaded as more than one instance`. Workspaces here have their own `node_modules`, so both `apps/web/vite.config.ts` and `vitest.config.ts` set:
 
-## Deliberate gaps
+```ts
+resolve: {
+  dedupe: ['foldkit', '@foldkit/ui', 'effect']
+}
+```
 
-These are known and not bugs:
+Keep that in place when adding a workspace dependency that imports Foldkit.
 
-- **Dialog has no focus trap.** Tab can leave the dialog. Closing returns focus to the browser's choice, not to the trigger.
-- **Menu has no typeahead.** Arrows, Home and End only.
-- **Popover and Menu position themselves with CSS.** `align: 'start' | 'end'` picks a side; there is no collision detection against the viewport.
-- **Nothing is portalled.** Overlays render where the component sits in the tree, which is fine for this app's single column.
-- **Tooltip has no delay.** It opens on `mouseenter` and `focus` immediately.
-
-## Writing a component
+## Writing a renderer
 
 Three rules that StyleX enforces, learned the hard way:
 

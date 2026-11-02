@@ -1,9 +1,11 @@
-import { Option } from 'effect'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 
+import type { RenderInfo } from '@foldkit/ui/popover'
 import * as stylex from '@stylexjs/stylex'
 
 import { font, palette, space, typeScale } from './tokens.stylex.js'
+
+export * from '@foldkit/ui/popover'
 
 const styles = stylex.create({
   wrapper: {
@@ -36,11 +38,8 @@ const styles = stylex.create({
     zIndex: 20,
   },
   panel: {
-    position: 'absolute',
-    top: '100%',
     zIndex: 21,
     width: 'min(24rem, calc(100vw - 2rem))',
-    marginTop: space.sm,
     padding: space.md,
     borderWidth: '1px',
     borderStyle: 'solid',
@@ -57,22 +56,17 @@ const styles = stylex.create({
       outlineOffset: '2px',
     },
   },
-  start: { insetInlineStart: 0 },
-  end: { insetInlineEnd: 0 },
 })
 
-export type PopoverProps<Message> = {
-  readonly id: string
-  readonly label: string
-  readonly isOpen: boolean
-  readonly onToggle: Message
-  readonly onClose: Message
-  readonly children: ReadonlyArray<Html>
-  readonly align?: 'start' | 'end'
-}
+export type RenderConfig = Readonly<{
+  label: string
+  children: Html
+}>
 
-export const view = <Message>(
-  props: PopoverProps<Message>,
+/** An underlined trigger with a panel anchored below it. */
+export const render = <Message>(
+  info: RenderInfo,
+  config: RenderConfig,
   h: HtmlBuilder<Message>,
 ): Html =>
   h.span(
@@ -80,42 +74,25 @@ export const view = <Message>(
     [
       h.button(
         [
-          h.Type('button'),
-          h.Id(`${props.id}-trigger`),
-          h.AriaExpanded(props.isOpen),
-          h.AriaControls(`${props.id}-panel`),
+          ...info.button,
           h.Attribute('class', stylex.attrs(styles.trigger).class ?? ''),
-          h.OnClick(props.onToggle),
         ],
-        [props.label],
+        [config.label],
       ),
-      props.isOpen
-        ? h.div([
-            h.Attribute('class', stylex.attrs(styles.scrim).class ?? ''),
-            h.OnClick(props.onClose),
-          ])
-        : h.empty,
-      props.isOpen
-        ? h.div(
-            [
-              h.Role('dialog'),
-              h.Id(`${props.id}-panel`),
-              h.AriaLabelledBy(`${props.id}-trigger`),
-              h.Tabindex(-1),
-              h.Autofocus(true),
-              h.Attribute(
-                'class',
-                stylex.attrs(
-                  styles.panel,
-                  props.align === 'end' ? styles.end : styles.start,
-                ).class ?? '',
-              ),
-              h.OnKeyDownPreventDefault(key =>
-                key === 'Escape' ? Option.some(props.onClose) : Option.none(),
-              ),
-            ],
-            props.children,
-          )
-        : h.empty,
+      ...(info.isVisible
+        ? [
+            h.div([
+              ...info.backdrop,
+              h.Attribute('class', stylex.attrs(styles.scrim).class ?? ''),
+            ]),
+            h.div(
+              [
+                ...info.panel,
+                h.Attribute('class', stylex.attrs(styles.panel).class ?? ''),
+              ],
+              [config.children],
+            ),
+          ]
+        : []),
     ],
   )

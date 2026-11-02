@@ -1,20 +1,19 @@
-import { Option } from 'effect'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 
+import type { RenderInfo } from '@foldkit/ui/dialog'
 import * as stylex from '@stylexjs/stylex'
 
 import { font, palette, space, typeScale } from './tokens.stylex.js'
 
+export * from '@foldkit/ui/dialog'
+
 const styles = stylex.create({
-  overlay: {
-    position: 'fixed',
-    inset: 0,
-    zIndex: 40,
+  dialog: {
     display: 'grid',
     placeItems: 'center',
     padding: space.lg,
   },
-  scrim: {
+  backdrop: {
     position: 'absolute',
     inset: 0,
     backgroundColor: palette.halo,
@@ -70,60 +69,65 @@ const styles = stylex.create({
   },
 })
 
-export type DialogProps<Message> = {
-  readonly id: string
-  readonly title: string
-  readonly children: ReadonlyArray<Html>
-  readonly onClose: Message
-}
+export type RenderConfig = Readonly<{
+  title: string
+  children: ReadonlyArray<Html>
+}>
 
-export const view = <Message>(
-  props: DialogProps<Message>,
+/** A centred panel on a scrim, closed by its own button, the scrim or Escape.
+ *  The close wiring lives in the component's `closeButton` attribute bundle. */
+export const render = <Message>(
+  info: RenderInfo,
+  config: RenderConfig,
   h: HtmlBuilder<Message>,
 ): Html =>
-  h.div(
-    [h.Attribute('class', stylex.attrs(styles.overlay).class ?? '')],
+  h.dialog(
     [
-      h.div([
-        h.Attribute('class', stylex.attrs(styles.scrim).class ?? ''),
-        h.OnClick(props.onClose),
-      ]),
-      h.div(
-        [
-          h.Role('dialog'),
-          h.Id(props.id),
-          h.AriaModal(true),
-          h.AriaLabelledBy(`${props.id}-title`),
-          h.Tabindex(-1),
-          h.Autofocus(true),
-          h.Attribute('class', stylex.attrs(styles.panel).class ?? ''),
-          h.OnKeyDownPreventDefault(key =>
-            key === 'Escape' ? Option.some(props.onClose) : Option.none(),
-          ),
-        ],
-        [
-          h.h2(
-            [
-              h.Id(`${props.id}-title`),
-              h.Attribute('class', stylex.attrs(styles.title).class ?? ''),
-            ],
-            [props.title],
-          ),
-          ...props.children,
+      ...info.dialog,
+      h.Attribute('class', stylex.attrs(styles.dialog).class ?? ''),
+    ],
+    info.isVisible
+      ? [
+          h.div([
+            ...info.backdrop,
+            h.Attribute('class', stylex.attrs(styles.backdrop).class ?? ''),
+          ]),
           h.div(
-            [h.Attribute('class', stylex.attrs(styles.actions).class ?? '')],
             [
-              h.button(
+              ...info.panel,
+              h.Attribute('class', stylex.attrs(styles.panel).class ?? ''),
+            ],
+            [
+              h.h2(
                 [
-                  h.Type('button'),
-                  h.OnClick(props.onClose),
-                  h.Attribute('class', stylex.attrs(styles.close).class ?? ''),
+                  ...info.title,
+                  h.Attribute('class', stylex.attrs(styles.title).class ?? ''),
                 ],
-                ['Close'],
+                [config.title],
+              ),
+              ...config.children,
+              h.div(
+                [
+                  h.Attribute(
+                    'class',
+                    stylex.attrs(styles.actions).class ?? '',
+                  ),
+                ],
+                [
+                  h.button(
+                    [
+                      ...info.closeButton,
+                      h.Attribute(
+                        'class',
+                        stylex.attrs(styles.close).class ?? '',
+                      ),
+                    ],
+                    ['Close'],
+                  ),
+                ],
               ),
             ],
           ),
-        ],
-      ),
-    ],
+        ]
+      : [],
   )

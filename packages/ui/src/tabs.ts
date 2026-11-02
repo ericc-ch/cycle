@@ -1,9 +1,11 @@
-import { Array, Option } from 'effect'
 import type { Html, HtmlBuilder } from 'foldkit/html'
 
+import type { RenderInfo } from '@foldkit/ui/tabs'
 import * as stylex from '@stylexjs/stylex'
 
 import { font, palette, space, typeScale } from './tokens.stylex.js'
+
+export * from '@foldkit/ui/tabs'
 
 const styles = stylex.create({
   list: {
@@ -43,119 +45,38 @@ const styles = stylex.create({
   },
 })
 
-export type TabItem<Value extends string> = {
-  readonly value: Value
-  readonly label: string
-}
-
-export type TabsProps<Value extends string, Message> = {
-  readonly idPrefix: string
-  readonly label: string
-  readonly value: Value
-  readonly tabs: ReadonlyArray<TabItem<Value>>
-  readonly onChange: (value: Value) => Message
-}
-
-const targetIndexFor = (
-  key: string,
-  currentIndex: number,
-  lastIndex: number,
-): Option.Option<number> => {
-  if (key === 'ArrowRight') {
-    return Option.some(currentIndex >= lastIndex ? 0 : currentIndex + 1)
-  }
-
-  if (key === 'ArrowLeft') {
-    return Option.some(currentIndex <= 0 ? lastIndex : currentIndex - 1)
-  }
-
-  if (key === 'Home') {
-    return Option.some(0)
-  }
-
-  if (key === 'End') {
-    return Option.some(lastIndex)
-  }
-
-  return Option.none()
-}
-
-const nextValue = <Value extends string>(
-  tabs: ReadonlyArray<TabItem<Value>>,
-  value: Value,
-  key: string,
-): Option.Option<Value> => {
-  const currentIndex = Option.getOrElse(
-    Array.findFirstIndex(tabs, tab => tab.value === value),
-    () => 0,
-  )
-
-  return Option.flatMap(
-    targetIndexFor(key, currentIndex, tabs.length - 1),
-    index => Option.map(Array.get(tabs, index), tab => tab.value),
-  )
-}
-
-export const view = <Value extends string, Message>(
-  props: TabsProps<Value, Message>,
+/** Lays out the tab list and the active panel. The panel content is supplied
+ *  by the app, because only the app knows what each tab holds. */
+export const render = <Value extends string, Message>(
+  info: RenderInfo<Value>,
+  panel: (value: Value) => Html,
   h: HtmlBuilder<Message>,
 ): Html =>
   h.div(
+    [],
     [
-      h.Role('tablist'),
-      h.AriaLabel(props.label),
-      h.Attribute('class', stylex.attrs(styles.list).class ?? ''),
-      h.OnKeyDownFocus(key =>
-        Option.map(nextValue(props.tabs, props.value, key), value => ({
-          focusSelector: `[data-tab="${value}"]`,
-          message: props.onChange(value),
-        })),
-      ),
-    ],
-    Array.map(props.tabs, tab =>
-      h.keyed('button')(
-        tab.value,
+      h.div(
         [
-          h.Type('button'),
-          h.Role('tab'),
-          h.Id(`${props.idPrefix}-tab-${tab.value}`),
-          h.AriaSelected(tab.value === props.value),
-          h.AriaControls(`${props.idPrefix}-panel-${tab.value}`),
-          h.Tabindex(tab.value === props.value ? 0 : -1),
-          h.DataAttribute('tab', tab.value),
-          h.OnClick(props.onChange(tab.value)),
-          h.Attribute(
-            'class',
-            stylex.attrs(
-              styles.tab,
-              tab.value === props.value && styles.selected,
-            ).class ?? '',
+          ...info.tablist,
+          h.Attribute('class', stylex.attrs(styles.list).class ?? ''),
+        ],
+        info.tabs.map(tab =>
+          h.keyed('button')(
+            tab.value,
+            [
+              ...tab.tab,
+              h.Attribute(
+                'class',
+                stylex.attrs(styles.tab, tab.isActive && styles.selected)
+                  .class ?? '',
+              ),
+            ],
+            [tab.value],
           ),
-        ],
-        [tab.label],
+        ),
       ),
-    ),
+      ...info.tabs
+        .filter(tab => tab.index === info.activeIndex)
+        .map(tab => h.div([...tab.panel], [panel(tab.value)])),
+    ],
   )
-
-export type TabPanelProps = {
-  readonly idPrefix: string
-  readonly value: string
-  readonly current: string
-  readonly children: ReadonlyArray<Html>
-}
-
-export const panel = <Message>(
-  props: TabPanelProps,
-  h: HtmlBuilder<Message>,
-): Html =>
-  props.value === props.current
-    ? h.div(
-        [
-          h.Role('tabpanel'),
-          h.Id(`${props.idPrefix}-panel-${props.value}`),
-          h.AriaLabelledBy(`${props.idPrefix}-tab-${props.value}`),
-          h.Tabindex(0),
-        ],
-        props.children,
-      )
-    : h.empty
