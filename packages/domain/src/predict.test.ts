@@ -9,8 +9,10 @@ import {
   cycleDayFor,
   defaultPredictorOptions,
   forecast,
+  isLikelySkip,
   median,
   stateFor,
+  withoutLikelySkips,
 } from './predict'
 
 const log = (date: string, flow: DayLog['flow'] = 'Bleeding'): DayLog => ({
@@ -68,12 +70,20 @@ describe('forecast', () => {
   })
 
   test('one long cycle moves the median but not the centre much', () => {
-    const forecasted = Option.getOrThrow(forecast([28, 29, 30, 28, 29, 60], 0))
+    const forecasted = Option.getOrThrow(forecast([28, 29, 30, 28, 29, 40], 0))
 
     expect(forecasted.centreDays).toBe(29)
     expect(forecasted.spreadDays).toBeGreaterThan(
       defaultPredictorOptions.spreadFloorDays,
     )
+  })
+
+  test('a gap that looks like a missed log is left out of the estimate', () => {
+    const forecasted = Option.getOrThrow(forecast([28, 29, 30, 28, 29, 60], 0))
+
+    expect(forecasted.centreDays).toBe(29)
+    expect(forecasted.spreadDays).toBe(defaultPredictorOptions.spreadFloorDays)
+    expect(forecasted.cyclesCounted).toBe(5)
   })
 
   test('only the last six cycles count', () => {
@@ -151,6 +161,46 @@ describe('stateFor', () => {
     ])
 
     expect(tagOf(stateFor(missed, '2026-09-20'))).toBe('Expected')
+  })
+})
+
+describe('likely missed logs', () => {
+  test('a gap well over her median is flagged', () => {
+    expect(isLikelySkip([30, 30, 30], 51)).toBe(true)
+  })
+
+  test('a long but plausible cycle is not', () => {
+    expect(isLikelySkip([30, 30, 30], 40)).toBe(false)
+  })
+
+  test('nothing is judged on fewer than three lengths', () => {
+    expect(isLikelySkip([30, 30], 90)).toBe(false)
+  })
+
+  test('the estimate leaves a flagged gap out', () => {
+    expect(withoutLikelySkips([30, 30, 30, 60])).toStrictEqual([30, 30, 30])
+    expect(withoutLikelySkips([30, 30, 30, 40])).toStrictEqual([30, 30, 30, 40])
+  })
+
+  test('the forecast keeps her usual cycle when one period was missed', () => {
+    const withGap = Option.getOrThrow(forecast([30, 30, 30, 60], 0))
+    const withoutGap = Option.getOrThrow(forecast([30, 30, 30], 0))
+
+    expect(withGap.centreDays).toBe(30)
+    expect(withGap.cyclesCounted).toBe(3)
+    expect(withGap.likelyDay).toBe(withoutGap.likelyDay)
+  })
+
+  test('the check can be turned off for comparison', () => {
+    const forecasted = Option.getOrThrow(
+      forecast([30, 30, 30, 60], 0, {
+        ...defaultPredictorOptions,
+        skipRatio: Number.POSITIVE_INFINITY,
+      }),
+    )
+
+    expect(forecasted.cyclesCounted).toBe(4)
+    expect(forecasted.centreDays).toBe(30)
   })
 })
 

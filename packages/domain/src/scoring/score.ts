@@ -2,7 +2,7 @@ import { Array, Console, Effect, FileSystem, Option, pipe } from 'effect'
 
 import { NodeRuntime, NodeServices } from '@effect/platform-node'
 
-import { median } from '../predict'
+import { defaultPredictorOptions, forecast, median } from '../predict'
 import {
   type CycleRow,
   type TrainingPair,
@@ -168,6 +168,58 @@ const medianAbsolute = (errors: ReadonlyArray<number>): number =>
     ? 0
     : median(pipe(errors, Array.map(Math.abs)))
 
+const SKIP_MIN_HISTORY = 5
+
+type SkipCase = {
+  readonly history: ReadonlyArray<number>
+  readonly missed: number
+  readonly honest: ReadonlyArray<number>
+  readonly actual: number
+}
+
+/** Synthetic missed logs: merge two consecutive cycles into the gap the app
+ *  would have seen, then predict the cycle after it. The reference is what
+ *  the same predictor does when she logged both. */
+const skipCases = (rows: ReadonlyArray<CycleRow>): ReadonlyArray<SkipCase> =>
+  Array.flatMap(orderedGroups(rows), group => {
+    const lengths = Array.map(group, cycle => cycle.lengthDays)
+    const cases: Array<SkipCase> = []
+
+    for (let index = SKIP_MIN_HISTORY; index + 2 < lengths.length; index += 1) {
+      cases.push({
+        history: lengths.slice(0, index),
+        missed: lengths[index]! + lengths[index + 1]!,
+        honest: lengths.slice(0, index + 2),
+        actual: lengths[index + 2]!,
+      })
+    }
+
+    return cases
+  })
+
+const evaluateSkip = (
+  name: string,
+  cases: ReadonlyArray<SkipCase>,
+  historyFor: (sample: SkipCase) => ReadonlyArray<number>,
+  skipRatio: number,
+): MetricsRow => ({
+  name,
+  errors: pipe(
+    cases,
+    Array.map(sample =>
+      Option.map(
+        forecast(historyFor(sample), 0, {
+          ...defaultPredictorOptions,
+          skipRatio,
+        }),
+        forecasted => forecasted.likelyDay - sample.actual,
+      ),
+    ),
+    Array.getSomes,
+  ),
+  coverage: [],
+})
+
 const main = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem
   const datasetPath =
@@ -200,6 +252,34 @@ const main = Effect.gen(function* () {
   yield* Console.log('')
   yield* Console.log(
     `floor: an oracle that already knew each woman's median scores MAE ${meanAbsolute(oracleErrors(rows)).toFixed(2)} (medAE ${medianAbsolute(oracleErrors(rows)).toFixed(1)}). The gap from the app row to that is all a better model could win.`,
+  )
+  yield* Console.log('')
+
+  const skips = skipCases(rows)
+  yield* Console.log(
+    `if she missed logging one period (synthetic: two cycles merged, ${skips.length} cases), predicting the one after:`,
+  )
+  yield* Console.log(
+    formatMetricsTable([
+      evaluateSkip(
+        'if she had logged it (reference)',
+        skips,
+        sample => sample.honest,
+        Number.POSITIVE_INFINITY,
+      ),
+      evaluateSkip(
+        'gap taken at face value',
+        skips,
+        sample => [...sample.history, sample.missed],
+        Number.POSITIVE_INFINITY,
+      ),
+      evaluateSkip(
+        'gap dropped (shipped)',
+        skips,
+        sample => [...sample.history, sample.missed],
+        defaultPredictorOptions.skipRatio,
+      ),
+    ]),
   )
   yield* Console.log('')
   yield* Console.log(

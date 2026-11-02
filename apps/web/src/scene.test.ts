@@ -1,4 +1,4 @@
-import { Option } from 'effect'
+import { Array, Option } from 'effect'
 import {
   Command,
   click,
@@ -31,6 +31,39 @@ const baseModel: Model = init({
 }).model
 
 const emptyModel: Model = init({ logs: Option.none(), today: TODAY }).model
+
+/** A run of bleeding days starting at `start`, `days` long. */
+const run = (
+  start: string,
+  days = 3,
+): ReadonlyArray<{
+  date: string
+  flow: 'Bleeding'
+}> => {
+  const [year = 1970, month = 1, day = 1] = start.split('-').map(Number)
+
+  return Array.makeBy(days, offset => ({
+    date: new Date(Date.UTC(year, month - 1, day + offset))
+      .toISOString()
+      .slice(0, 10),
+    flow: 'Bleeding' as const,
+  }))
+}
+
+// Three 30 day cycles, then a 51 day gap: longer than 1.6 x her median, so
+// the app should read it as a period she never logged.
+const missedLog = [
+  ...run('2026-06-01'),
+  ...run('2026-07-01'),
+  ...run('2026-07-31'),
+  ...run('2026-08-30'),
+  ...run('2026-10-20'),
+]
+
+const missedLogModel: Model = init({
+  logs: Option.some(missedLog),
+  today: TODAY,
+}).model
 
 describe('view', () => {
   test('empty state asks for the first period', () => {
@@ -141,6 +174,16 @@ describe('view', () => {
       expect(text('Periods')).toExist(),
       expect(text('3 Oct – 5 Oct')).toExist(),
       expect(role('status')).toBeAbsent(),
+    )
+  })
+
+  test('History marks a gap that looks like a missed log', () => {
+    scene(
+      { update, view },
+      given(missedLogModel),
+      click(role('tab', { name: 'History' })),
+      Command.resolve(Tabs.FocusTab, Tabs.Message.CompletedFocusTab()),
+      expect(text(/Probably a period you did not log/)).toExist(),
     )
   })
 

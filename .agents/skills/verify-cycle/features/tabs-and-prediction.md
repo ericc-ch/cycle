@@ -8,6 +8,7 @@ deterministic
 
 - `Today`, `History`, `About` switch the panel and mark the active tab.
 - History lists period rows when there are logs.
+- A gap over 1.6× her usual cycle is labelled under its row as a probable missed log, and the estimate skips it.
 - About renders the prediction switch in the `on` state.
 - Toggling the switch writes `off`, and Today reports `Prediction is off.`
 - Prediction returns to `on` after a reload (it is in-memory, not persisted).
@@ -24,6 +25,8 @@ node .agents/skills/verify-cycle/scripts/drive.mjs tabs
 ```
 
 Click `[data-slot="tabs-trigger"]` by text. The active tab carries `data-state="active"`. The switch carries `data-slot="switch"` and `data-state`; click it and read the attribute. After switching to Today, read `[role="status"]`.
+
+The missed-log case seeds four 30 day cycles and then a 51 day gap, switches to History and expects the sentence `Probably a period you did not log` under exactly one row.
 
 ## Gotchas
 

@@ -350,6 +350,36 @@ const flows = {
         `document.querySelector('[data-slot="switch"]')?.dataset.state`,
       )) === 'checked',
     )
+
+    // A gap well over her usual is labelled in History instead of being
+    // silently averaged in.
+    const periodRun = (daysAgo, days = 3) =>
+      Array.from({ length: days }, (_, offset) => ({
+        date: dayKey(daysAgo - offset),
+        flow: 'Bleeding',
+      }))
+
+    await seed(browser, [
+      ...periodRun(171),
+      ...periodRun(141),
+      ...periodRun(111),
+      ...periodRun(81),
+      ...periodRun(30),
+    ])
+    await browser.click('[data-slot="tabs-trigger"]', 'History')
+    await browser.waitFor(
+      `document.body.innerText.includes('Probably a period you did not log')`,
+      { label: 'the missed-log note' },
+    )
+    must(flow, 'History explains a probable missed log', true)
+    must(
+      flow,
+      'the other rows are left alone',
+      (await browser.evaluate(
+        `[...document.querySelectorAll('[data-slot="tabs-content"] li')].filter(node => node.textContent.includes('Probably a period you did not log')).length`,
+      )) === 1,
+    )
+    await browser.screenshot(join(outDir, 'tabs-missed-log.png'))
   },
 
   async overlays(browser) {

@@ -118,31 +118,34 @@ export const periodDayCount = (period: Period): Option.Option<number> =>
     ([start, end]) => end - start + 1,
   )
 
+/** One entry per period: the gap from the previous start, or `None` for the
+ *  first. Out-of-range gaps stay in place as `None` so an entry always lines
+ *  up with its period. */
+export const cycleLengthsByPeriod = (
+  periods: ReadonlyArray<Period>,
+): ReadonlyArray<Option.Option<number>> =>
+  Array.map(periods, (period, index) => {
+    const maybePrevious = Array.get(periods, index - 1)
+
+    return Option.flatMap(maybePrevious, previous =>
+      Option.flatMap(
+        Option.all([
+          parseDayNumber(previous.start),
+          parseDayNumber(period.start),
+        ]),
+        ([previousStart, start]) => {
+          const length = start - previousStart
+          return length >= MIN_CYCLE_DAYS && length <= MAX_CYCLE_DAYS
+            ? Option.some(length)
+            : Option.none()
+        },
+      ),
+    )
+  })
+
 export const cycleLengths = (
   periods: ReadonlyArray<Period>,
-): ReadonlyArray<number> =>
-  pipe(
-    periods,
-    Array.map((period, index) => {
-      const maybePrevious = Array.get(periods, index - 1)
-
-      return Option.flatMap(maybePrevious, previous =>
-        Option.flatMap(
-          Option.all([
-            parseDayNumber(previous.start),
-            parseDayNumber(period.start),
-          ]),
-          ([previousStart, start]) => {
-            const length = start - previousStart
-            return length >= MIN_CYCLE_DAYS && length <= MAX_CYCLE_DAYS
-              ? Option.some(length)
-              : Option.none()
-          },
-        ),
-      )
-    }),
-    Array.getSomes,
-  )
+): ReadonlyArray<number> => Array.getSomes(cycleLengthsByPeriod(periods))
 
 export const periodsSorted = (
   periods: ReadonlyArray<Period>,

@@ -58,6 +58,7 @@ git clone --depth 1 --branch "foldkit@$(node -p "require('./node_modules/foldkit
 
 - **flow** — a day's bleeding: `Spotting | Bleeding`. Spotting is not bleeding. The three heaviness levels an earlier build stored (`Light | Medium | Heavy`) are folded into `Bleeding` on boot; nothing writes them.
 - **range** — two dates picked in the calendar and filled with the same flow in one save. Stored as one log per day, so nothing downstream knows about ranges.
+- **missed log** — a gap over 1.6× her median once three lengths exist. It is not removed from the logs or the calendar; it is labelled in History and left out of the estimate (`isLikelySkip`). Verified against synthetic merges in `nub run score`.
 - **period** — a run of bleeding days. Derived from day logs, never stored. A bleeding day starts a new period only when there were two clear days before it; trailing spotting within one day extends the end.
 - **cycle length** — the gap between two period starts, kept only in 15–90 days.
 - **cycle state** — `NoCycles | Expected | Late | Overdue`. `Overdue` is measured against the _unshifted_ window, so it is reachable while the live window is still sliding forward.

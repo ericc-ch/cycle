@@ -31,11 +31,12 @@ Not in scope, on purpose: ovulation, fertile windows, contraception claims, acco
 `packages/domain/src/predict.ts`. No training, no model file. Roughly:
 
 1. Cycle lengths are the gaps between period starts, keeping 15–90 days and dropping the rest as mis-entries.
-2. With 6 or more cycles, the centre is the median of the last 6. Fewer than 3 uses her own mean pulled toward a 29 day prior; 3 to 5 uses the median but with an inflated spread.
-3. The spread is her own standard deviation, floored at 2.3 days and inflated for small samples.
-4. The window is centre ± 1.28 × spread, about the 80% band, rounded outward to dates.
-5. While the cycle is running, the estimate is conditioned on "it has not started yet", so it slides forward by less than a day for each day late.
-6. Past the window, the state becomes `Overdue` and the UI stops predicting.
+2. A gap over 1.6× her median, once she has three lengths, is read as a period she did not log. It stays in History with a note; the estimate leaves it out, because one merged gap drags both the centre and the spread.
+3. With 6 or more cycles, the centre is the median of the last 6. Fewer than 3 uses her own mean pulled toward a 29 day prior; 3 to 5 uses the median but with an inflated spread.
+4. The spread is her own standard deviation, floored at 2.3 days and inflated for small samples.
+5. The window is centre ± 1.28 × spread, about the 80% band, rounded outward to dates.
+6. While the cycle is running, the estimate is conditioned on "it has not started yet", so it slides forward by less than a day for each day late.
+7. Past the window, the state becomes `Overdue` and the UI stops predicting.
 
 The shipped prior is deliberately wider than the dataset below (4 days for a cold start, 2.3 as a floor once she has data). App users are messier than the volunteers in a fertility study: the Apple Women's Health Study reports per-person spread around 4.7 days for people in their twenties. Under-promising is the point.
 
@@ -55,7 +56,7 @@ mean of last 3 (Mooneva)                1211     2.25     1.7   39.5%   63.0%   
 mean of last 5 (Mensinator)             1346     2.17     1.5   38.8%   63.4%   77.0%         —
 mean of all previous (drip)             1211     2.14     1.5   37.4%   63.2%   76.4%         —
 median of last 6                        1490     2.22     1.5   45.7%   68.1%   78.1%         —
-app: median6 + prior + spread           1490     2.19     2.0   49.7%   69.4%   80.1%     89.4%
+app: median6 + prior + spread           1490     2.19     2.0   49.7%   69.4%   80.1%     89.3%
 floor: oracle with her whole history    1506     1.82     1.0      —       —       —           —
 ```
 
@@ -66,7 +67,21 @@ Three things worth taking from that table:
 - A fixed 28 or 29 day guess is clearly worse, so the win is using her own data at all.
 - The 80% band covers 89% here. That is intentional: a range one day too wide is fine, a range one day too narrow is the app being confidently wrong.
 
-The literature agrees that the model is not the lever. On 2 million Clue cycles, a hierarchical model beat the median baseline by 0.1 day at the start of a cycle, while CNN, RNN and LSTM baselines did no better than the median ([Li et al., JAMIA 2022](https://doi.org/10.1093/jamia/ocab182)); most of its gain came after the typical cycle length had passed, by modelling **missed logs**, which this app handles as a question instead. The per-woman spread of 2.6 days measured across 612,613 Natural Cycles cycles ([Bull et al., npj Digital Medicine 2019](https://doi.org/10.1038/s41746-019-0152-7)) puts the same floor under any predictor that only sees dates.
+The literature agrees that the model is not the lever. On 2 million Clue cycles, a hierarchical model beat the median baseline by 0.1 day at the start of a cycle, while CNN, RNN and LSTM baselines did no better than the median ([Li et al., JAMIA 2022](https://doi.org/10.1093/jamia/ocab182)); most of its gain came after the typical cycle length had passed, by modelling **missed logs**, which this app handles by dropping the gap. The per-woman spread of 2.6 days measured across 612,613 Natural Cycles cycles ([Bull et al., npj Digital Medicine 2019](https://doi.org/10.1038/s41746-019-0152-7)) puts the same floor under any predictor that only sees dates.
+
+## Missed logs
+
+Forgetting a period is the one error that is not biology, and it is cheap to catch: a gap far longer than her usual is almost always two cycles with one start missing. The rule is `gap > 1.6 × median of the lengths before it`, applied once she has three lengths. To test it, the harness merges each pair of consecutive cycles into the gap the app would have seen, then predicts the cycle after:
+
+```
+if she missed logging one period (synthetic: two cycles merged, 755 cases), predicting the one after:
+method                                     n     MAE  medAE     ±1     ±2     ±3  80% band
+if she had logged it (reference)         755     2.04     1.0   54.2%   71.4%   80.7%         —
+gap taken at face value                  755     2.24     2.0   48.2%   67.8%   78.4%         —
+gap dropped (shipped)                    755     2.09     1.0   51.0%   69.8%   80.9%         —
+```
+
+Dropping the gap recovers most of what the missed log cost (0.20 days of MAE down to 0.05) without inventing a date the way splitting it would. On the same data the rule fires on **99.9%** of simulated missed logs and on **2 of 1,223** genuine cycles, and `History` says so under the row instead of quietly showing a 58 day cycle.
 
 Underneath, the interesting number is what happens while a cycle is open: at the estimated date, 54% of cycles still had not started, and among those the app is within two days 80% of the time.
 

@@ -24,6 +24,7 @@ export {
   Period as PeriodSchema,
   StoredFlow as StoredFlowSchema,
   cycleLengths,
+  cycleLengthsByPeriod,
   flowFromStored,
   flowOn,
   isBleedingFlow,
@@ -45,6 +46,8 @@ export {
   confidenceFor,
   cycleDayFor,
   forecast,
+  isLikelySkip,
   median,
   stateFor,
+  withoutLikelySkips,
 } from './predict'

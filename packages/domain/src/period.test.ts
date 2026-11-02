@@ -4,6 +4,7 @@ import { describe, expect, test } from 'vitest'
 import {
   type DayLog,
   cycleLengths,
+  cycleLengthsByPeriod,
   flowFromStored,
   flowOn,
   isBleedingFlow,
@@ -112,6 +113,20 @@ describe('cycleLengths', () => {
     ])
 
     expect(cycleLengths(periods)).toStrictEqual([31])
+  })
+
+  test('the per-period view keeps its slots so rows stay aligned', () => {
+    const periods = periodsFrom([
+      log('2026-01-01', 'Bleeding'),
+      log('2026-04-11', 'Bleeding'),
+      log('2026-05-09', 'Bleeding'),
+    ])
+
+    expect(cycleLengthsByPeriod(periods)).toStrictEqual([
+      Option.none(),
+      Option.none(),
+      Option.some(28),
+    ])
   })
 })
 

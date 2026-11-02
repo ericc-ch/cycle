@@ -15,7 +15,7 @@ import {
   type Period,
   StoredFlowSchema,
   cycleDayFor,
-  cycleLengths,
+  cycleLengthsByPeriod,
   dateKeyFromMillis,
   dateKeyFromParts,
   dateKeyOrder,
@@ -25,6 +25,7 @@ import {
   flowOn,
   formatDayNumber,
   isBleedingFlow,
+  isLikelySkip,
   latestPeriod,
   logsSorted,
   median,
@@ -611,6 +612,11 @@ const styles = stylex.create({
     color: palette.fg1,
     textAlign: 'end',
   },
+  rowNote: {
+    gridColumn: '1 / -1',
+    fontSize: typeScale.sm,
+    color: palette.fg1,
+  },
   prose: {
     display: 'flex',
     flexDirection: 'column',
@@ -1143,11 +1149,12 @@ const todayView = (
 
 const historyRows = (
   periods: ReadonlyArray<Period>,
-  lengths: ReadonlyArray<number>,
+  gaps: ReadonlyArray<Option.Option<number>>,
 ): ReadonlyArray<{
   readonly id: string
   readonly label: string
   readonly meta: string
+  readonly note: Option.Option<string>
 }> =>
   Array.getSomes(
     Array.map(periods, (period, index) =>
@@ -1155,16 +1162,27 @@ const historyRows = (
         Option.all([parseDayNumber(period.start), parseDayNumber(period.end)]),
         ([start, end]) => {
           const days = end - start + 1
+          const maybeLength = Option.flatten(
+            Array.get(gaps, index) ?? Option.none(),
+          )
+          const isSkip = Option.exists(maybeLength, length =>
+            isLikelySkip(Array.getSomes(Array.take(gaps, index)), length),
+          )
 
           return {
             id: period.start,
             label: `${monthDayLabel(start)} – ${monthDayLabel(end)}`,
             meta:
               `${plural(days, 'day', 'days')} · ` +
-              Option.match(Array.get(lengths, index), {
+              Option.match(maybeLength, {
                 onNone: () => '—',
                 onSome: length => `${length} day cycle`,
               }),
+            note: isSkip
+              ? Option.some(
+                  'Probably a period you did not log, so the estimate skips this gap.',
+                )
+              : Option.none(),
           }
         },
       ),
@@ -1175,8 +1193,9 @@ const historyView = (
   periods: ReadonlyArray<Period>,
   h: HtmlBuilder<Message>,
 ): Html => {
-  const lengths = cycleLengths(periods)
-  const rows = Array.reverse(historyRows(periods, lengths))
+  const gaps = cycleLengthsByPeriod(periods)
+  const lengths = Array.getSomes(gaps)
+  const rows = Array.reverse(historyRows(periods, gaps))
   const lastPeriod = latestPeriod(periods)
 
   return h.div(
@@ -1218,6 +1237,20 @@ const historyView = (
                     ],
                     [row.meta],
                   ),
+                  ...Option.match(row.note, {
+                    onNone: () => [],
+                    onSome: note => [
+                      h.span(
+                        [
+                          h.Attribute(
+                            'class',
+                            stylex.attrs(styles.rowNote).class ?? '',
+                          ),
+                        ],
+                        [note],
+                      ),
+                    ],
+                  }),
                 ],
               ),
             ),
