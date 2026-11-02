@@ -1,6 +1,6 @@
 import type { Html, HtmlBuilder } from 'foldkit/html'
 
-import type { RenderInfo } from '@foldkit/ui/tabs'
+import type { RenderInfo, TabInfo } from '@foldkit/ui/tabs'
 import * as stylex from '@stylexjs/stylex'
 
 import { font, palette, space, typeScale } from '../../tokens.stylex.js'
@@ -17,7 +17,7 @@ const styles = stylex.create({
     borderBottomColor: palette.line,
     paddingBottom: space.sm,
   },
-  tab: {
+  trigger: {
     appearance: 'none',
     fontFamily: font.sans,
     fontSize: typeScale.base,
@@ -36,7 +36,7 @@ const styles = stylex.create({
       outlineOffset: '2px',
     },
   },
-  selected: {
+  triggerSelected: {
     color: palette.fg0,
     textDecorationLine: 'underline',
     textDecorationThickness: '2px',
@@ -45,38 +45,46 @@ const styles = stylex.create({
   },
 })
 
-/** Lays out the tab list and the active panel. The panel content is supplied
- *  by the app, because only the app knows what each tab holds. */
-export const render = <Value extends string, Message>(
+/** The tab list. Renders one trigger per tab, in the order the app supplied:
+ *  shadcn's `TabsList` owns its `TabsTrigger`s the same way. */
+export const list = <Value extends string, Message>(
   info: RenderInfo<Value>,
-  panel: (value: Value) => Html,
   h: HtmlBuilder<Message>,
 ): Html =>
   h.div(
-    [],
     [
-      h.div(
-        [
-          ...info.tablist,
-          h.Attribute('class', stylex.attrs(styles.list).class ?? ''),
-        ],
-        info.tabs.map(tab =>
-          h.keyed('button')(
-            tab.value,
-            [
-              ...tab.tab,
-              h.Attribute(
-                'class',
-                stylex.attrs(styles.tab, tab.isActive && styles.selected)
-                  .class ?? '',
-              ),
-            ],
-            [tab.value],
-          ),
-        ),
-      ),
-      ...info.tabs
-        .filter(tab => tab.index === info.activeIndex)
-        .map(tab => h.div([...tab.panel], [panel(tab.value)])),
+      ...info.tablist,
+      h.DataAttribute('slot', 'tabs-list'),
+      h.Attribute('class', stylex.attrs(styles.list).class ?? ''),
     ],
+    info.tabs.map(tab => trigger(tab, h)),
   )
+
+/** One tab button. Marked with `data-state`, as shadcn marks its trigger. */
+export const trigger = <Value extends string, Message>(
+  tab: TabInfo<Value>,
+  h: HtmlBuilder<Message>,
+): Html =>
+  h.keyed('button')(
+    tab.value,
+    [
+      ...tab.tab,
+      h.DataAttribute('slot', 'tabs-trigger'),
+      h.DataAttribute('state', tab.isActive ? 'active' : 'inactive'),
+      h.Attribute(
+        'class',
+        stylex.attrs(styles.trigger, tab.isActive && styles.triggerSelected)
+          .class ?? '',
+      ),
+    ],
+    [tab.value],
+  )
+
+/** The panel for one tab. The app renders only the active one, which is the
+ *  `ActiveOnly` mount strategy the component defaults to. */
+export const panel = <Value extends string, Message>(
+  tab: TabInfo<Value>,
+  children: Html,
+  h: HtmlBuilder<Message>,
+): Html =>
+  h.div([...tab.panel, h.DataAttribute('slot', 'tabs-content')], [children])

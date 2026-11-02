@@ -52,7 +52,14 @@ describe('view', () => {
       expect(role('status')).toContainText('Day 18'),
       expect(role('status')).toContainText('Period expected'),
       expect(role('status')).toContainText('–'),
-      expect(role('radio', { name: 'None' })).toExist(),
+      expect(role('radio', { name: 'None' })).toHaveAttr(
+        'data-slot',
+        'radio-group-item',
+      ),
+      expect(role('radio', { name: 'None' })).toHaveAttr(
+        'data-state',
+        'checked',
+      ),
     )
   })
 
@@ -95,6 +102,15 @@ describe('view', () => {
     scene(
       { update, view },
       given(baseModel),
+      expect(role('tablist', { name: 'Sections' })).toHaveAttr(
+        'data-slot',
+        'tabs-list',
+      ),
+      expect(role('tab', { name: 'Today' })).toHaveAttr(
+        'data-slot',
+        'tabs-trigger',
+      ),
+      expect(role('tab', { name: 'Today' })).toHaveAttr('data-state', 'active'),
       click(role('tab', { name: 'History' })),
       Command.resolve(Tabs.FocusTab, Tabs.Message.CompletedFocusTab()),
       expect(text('Periods')).toExist(),

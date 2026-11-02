@@ -804,7 +804,7 @@ const overdueView = (
                 {
                   label: 'It is just late',
                   onClick: Message.AcknowledgedLate({ date: model.today }),
-                  variant: 'quiet',
+                  variant: 'ghost',
                 },
                 h,
               ),
@@ -1158,7 +1158,7 @@ const aboutView = (model: Model, h: HtmlBuilder<Message>): Html =>
         {
           label: 'How the range is calculated',
           onClick: Message.OpenedAbout(),
-          variant: 'quiet',
+          variant: 'ghost',
         },
         h,
       ),
@@ -1192,7 +1192,17 @@ const tabsView = (
       selectedValue: model.tab,
       ariaLabel: 'Sections',
       toView: info =>
-        Tabs.render(info, tab => tabContent(tab, model, periods, h), h),
+        h.div(
+          [h.DataAttribute('slot', 'tabs')],
+          [
+            Tabs.list(info, h),
+            ...Array.map(
+              Array.filter(info.tabs, tab => tab.index === info.activeIndex),
+              tab =>
+                Tabs.panel(tab, tabContent(tab.value, model, periods, h), h),
+            ),
+          ],
+        ),
     },
     toParentMessage: message => Message.GotTabsMessage({ message }),
   })

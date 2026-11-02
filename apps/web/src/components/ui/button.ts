@@ -9,9 +9,8 @@ export * from '@foldkit/ui/button'
 
 const styles = stylex.create({
   base: {
+    display: 'inline',
     fontFamily: font.sans,
-    fontSize: typeScale.base,
-    lineHeight: 1.5,
     color: palette.fg0,
     backgroundColor: 'transparent',
     borderWidth: 0,
@@ -29,15 +28,25 @@ const styles = stylex.create({
       outlineOffset: '2px',
     },
   },
-  quiet: {
+  ghost: {
     color: palette.fg1,
   },
-  bare: {
-    textDecorationLine: 'none',
+  sm: {
+    fontSize: typeScale.sm,
   },
-  square: {
-    padding: space.xs,
-    paddingInline: space.sm,
+  default: {
+    fontSize: typeScale.base,
+  },
+  lg: {
+    fontSize: typeScale.lg,
+  },
+  icon: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: typeScale.base,
+    paddingBlock: space.xs,
+    paddingInline: space.xs,
   },
   disabled: {
     color: palette.fg2,
@@ -46,21 +55,32 @@ const styles = stylex.create({
   },
 })
 
-export type Variant = 'plain' | 'quiet' | 'bare' | 'square'
+/** The variants this design can render. `default`, `outline`, `secondary` and
+ *  `destructive` all need a filled or bordered surface, which the design
+ *  forbids: "an underline that firms up on hover, no backgrounds, no pills, no
+ *  arrows, no primary button" (`docs/DESIGN.md` in the site repo). */
+export type Variant = 'link' | 'ghost'
+
+export type Size = 'sm' | 'default' | 'lg' | 'icon'
 
 export type RenderConfig<Message> = Readonly<{
   label: string
   onClick?: Message
   variant?: Variant
+  size?: Size
   isDisabled?: boolean
 }>
 
-/** A text-first button: underlined by default, no fill, no radius. */
+/** A text button. `link` is the default because it is the only treatment the
+ *  design allows; `ghost` is the same control in muted ink. */
 export const render = <Message>(
   config: RenderConfig<Message>,
   h: HtmlBuilder<Message>,
-): Html =>
-  view(
+): Html => {
+  const variant = config.variant ?? 'link'
+  const size = config.size ?? 'default'
+
+  return view(
     {
       ...(config.onClick === undefined ? {} : { onClick: config.onClick }),
       isDisabled: config.isDisabled ?? false,
@@ -68,13 +88,18 @@ export const render = <Message>(
         h.button(
           [
             ...attributes.button,
+            h.DataAttribute('slot', 'button'),
+            h.DataAttribute('variant', variant),
+            h.DataAttribute('size', size),
             h.Attribute(
               'class',
               stylex.attrs(
                 styles.base,
-                config.variant === 'quiet' && styles.quiet,
-                config.variant === 'bare' && styles.bare,
-                config.variant === 'square' && styles.square,
+                variant === 'ghost' && styles.ghost,
+                size === 'sm' && styles.sm,
+                size === 'default' && styles.default,
+                size === 'lg' && styles.lg,
+                size === 'icon' && styles.icon,
                 config.isDisabled === true && styles.disabled,
               ).class ?? '',
             ),
@@ -84,3 +109,4 @@ export const render = <Message>(
     },
     h,
   )
+}

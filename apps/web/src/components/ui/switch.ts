@@ -80,10 +80,16 @@ export const render = <Message>(
             h.button(
               [
                 ...attributes.button,
+                h.DataAttribute('slot', 'switch'),
+                h.DataAttribute(
+                  'state',
+                  config.isChecked ? 'checked' : 'unchecked',
+                ),
                 h.Attribute('class', stylex.attrs(styles.track).class ?? ''),
               ],
               [
                 h.span([
+                  h.DataAttribute('slot', 'switch-thumb'),
                   h.Attribute(
                     'class',
                     stylex.attrs(
@@ -97,6 +103,7 @@ export const render = <Message>(
             h.label(
               [
                 ...attributes.label,
+                h.DataAttribute('slot', 'switch-label'),
                 h.Attribute('class', stylex.attrs(styles.label).class ?? ''),
               ],
               [config.label],

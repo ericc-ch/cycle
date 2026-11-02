@@ -1,4 +1,5 @@
 import type { HtmlBuilder } from 'foldkit/html'
+import { childAttributes } from 'foldkit/html'
 
 import type { ViewInputs } from '@foldkit/ui/menu'
 import * as stylex from '@stylexjs/stylex'
@@ -78,7 +79,12 @@ export type RenderConfig<Item extends string> = Readonly<{
 }>
 
 /** Builds the headless view inputs for a text menu that hangs off its
- *  trigger, aligned to the inline end of the column by default. */
+ *  trigger, aligned to the inline end of the column by default.
+ *
+ *  `@foldkit/ui`'s Menu owns its own markup, so the shadcn part names arrive
+ *  as attributes and class names rather than as composable elements:
+ *  `dropdown-menu-trigger` and `dropdown-menu-content` on the button and the
+ *  panel, `dropdown-menu-item` on each item's content. */
 export const renderConfig = <Item extends string, Message>(
   config: RenderConfig<Item>,
   h: HtmlBuilder<Message>,
@@ -87,13 +93,26 @@ export const renderConfig = <Item extends string, Message>(
   itemToConfig: (item, context) => ({
     className:
       stylex.attrs(styles.item, context.isActive && styles.active).class ?? '',
-    content: h.span([], [config.label(item)]),
+    content: h.span(
+      [h.DataAttribute('slot', 'dropdown-menu-item')],
+      [config.label(item)],
+    ),
   }),
   buttonContent: h.span([], [config.trigger]),
   buttonClassName: stylex.attrs(styles.trigger).class ?? '',
+  buttonAttributes: childAttributes([
+    h.DataAttribute('slot', 'dropdown-menu-trigger'),
+  ]),
   itemsClassName: stylex.attrs(styles.items).class ?? '',
+  itemsAttributes: childAttributes([
+    h.DataAttribute('slot', 'dropdown-menu-content'),
+  ]),
   backdropClassName: stylex.attrs(styles.backdrop).class ?? '',
+  backdropAttributes: childAttributes([
+    h.DataAttribute('slot', 'dropdown-menu-backdrop'),
+  ]),
   className: stylex.attrs(styles.wrapper).class ?? '',
+  attributes: childAttributes([h.DataAttribute('slot', 'dropdown-menu')]),
   anchor: {
     placement: config.align === 'start' ? 'bottom-start' : 'bottom-end',
     gap: 4,
