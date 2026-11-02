@@ -139,6 +139,35 @@ const methods: ReadonlyArray<Method> = [
   appPredictor,
 ]
 
+/** A benchmark, not a method: an oracle that already knows each woman's
+ *  whole-history median. It bounds what any online predictor can still win,
+ *  because the rest is the spread of her own cycles. */
+const oracleErrors = (rows: ReadonlyArray<CycleRow>): ReadonlyArray<number> =>
+  pipe(
+    orderedGroups(rows),
+    Array.flatMap(group => {
+      const centre = median(Array.map(group, cycle => cycle.lengthDays))
+
+      return Array.flatMap(group, (cycle, index) =>
+        index === 0 ? [] : [cycle.lengthDays - centre],
+      )
+    }),
+  )
+
+const meanAbsolute = (errors: ReadonlyArray<number>): number =>
+  Array.isReadonlyArrayEmpty(errors)
+    ? 0
+    : pipe(
+        errors,
+        Array.reduce(0, (total, error) => total + Math.abs(error)),
+        total => total / errors.length,
+      )
+
+const medianAbsolute = (errors: ReadonlyArray<number>): number =>
+  Array.isReadonlyArrayEmpty(errors)
+    ? 0
+    : median(pipe(errors, Array.map(Math.abs)))
+
 const main = Effect.gen(function* () {
   const fileSystem = yield* FileSystem.FileSystem
   const datasetPath =
@@ -167,6 +196,10 @@ const main = Effect.gen(function* () {
   yield* Console.log('')
   yield* Console.log(
     formatMetricsTable(Array.map(methods, method => evaluate(method, pairs))),
+  )
+  yield* Console.log('')
+  yield* Console.log(
+    `floor: an oracle that already knew each woman's median scores MAE ${meanAbsolute(oracleErrors(rows)).toFixed(2)} (medAE ${medianAbsolute(oracleErrors(rows)).toFixed(1)}). The gap from the app row to that is all a better model could win.`,
   )
   yield* Console.log('')
   yield* Console.log(

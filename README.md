@@ -56,13 +56,17 @@ mean of last 5 (Mensinator)             1346     2.17     1.5   38.8%   63.4%   
 mean of all previous (drip)             1211     2.14     1.5   37.4%   63.2%   76.4%         —
 median of last 6                        1490     2.22     1.5   45.7%   68.1%   78.1%         —
 app: median6 + prior + spread           1490     2.19     2.0   49.7%   69.4%   80.1%     89.4%
+floor: oracle with her whole history    1506     1.82     1.0      —       —       —           —
 ```
 
 Three things worth taking from that table:
 
 - Every sane method is within a tenth of a day of every other one. The algorithm is not where accuracy comes from after three cycles.
+- The oracle row is the ceiling: even a model that already knew each woman's full-history median would score 1.82 days, because the rest is the spread of her own cycles. The 0.37 day gap to the app is all that better maths could win.
 - A fixed 28 or 29 day guess is clearly worse, so the win is using her own data at all.
 - The 80% band covers 89% here. That is intentional: a range one day too wide is fine, a range one day too narrow is the app being confidently wrong.
+
+The literature agrees that the model is not the lever. On 2 million Clue cycles, a hierarchical model beat the median baseline by 0.1 day at the start of a cycle, while CNN, RNN and LSTM baselines did no better than the median ([Li et al., JAMIA 2022](https://doi.org/10.1093/jamia/ocab182)); most of its gain came after the typical cycle length had passed, by modelling **missed logs**, which this app handles as a question instead. The per-woman spread of 2.6 days measured across 612,613 Natural Cycles cycles ([Bull et al., npj Digital Medicine 2019](https://doi.org/10.1038/s41746-019-0152-7)) puts the same floor under any predictor that only sees dates.
 
 Underneath, the interesting number is what happens while a cycle is open: at the estimated date, 54% of cycles still had not started, and among those the app is within two days 80% of the time.
 
