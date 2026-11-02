@@ -81,7 +81,7 @@ packages/domain/           date keys, period grouping, predictor, scoring
 
 ## The look
 
-Monochrome and typographic, borrowed from [my site](https://github.com/ericc-ch/ericc-ch.github.io) (`docs/DESIGN.md`): `light-dark()` tokens, Plus Jakarta Sans with JetBrains Mono for dates, a fluid type ladder, a 4px grid, a 50ch measure, no radius, no shadow, no motion.
+Monochrome and typographic, borrowed from [my site](https://github.com/ericc-ch/ericc-ch.github.io) (`docs/DESIGN.md`): `light-dark()` tokens, Plus Jakarta Sans everywhere, a fluid type ladder, a 4px grid, a 50ch measure, no radius, no shadow, no motion. The site pairs dates with JetBrains Mono; that second face is removed here for now, so there is one family until a mono face is added back.
 
 There is no accent colour. Flow is encoded in ink: spotting is a hairline, light and medium are mid greys, heavy is full foreground. State lives in text, never in colour alone.
 

@@ -426,7 +426,7 @@ const styles = stylex.create({
     gap: space.xs,
   },
   day: {
-    fontFamily: font.mono,
+    fontFamily: font.sans,
     fontSize: typeScale.xxxl,
     fontWeight: 400,
     letterSpacing: '-0.02em',
@@ -468,7 +468,7 @@ const styles = stylex.create({
     borderColor: palette.fg0,
   },
   cellNumber: {
-    fontFamily: font.mono,
+    fontFamily: font.sans,
     fontSize: typeScale.sm,
     color: palette.fg1,
     lineHeight: 1,
@@ -499,7 +499,7 @@ const styles = stylex.create({
     fontSize: typeScale.sm,
   },
   mono: {
-    fontFamily: font.mono,
+    fontFamily: font.sans,
     fontSize: typeScale.sm,
     color: palette.fg1,
   },
@@ -518,7 +518,7 @@ const styles = stylex.create({
     alignItems: 'baseline',
   },
   rowMeta: {
-    fontFamily: font.mono,
+    fontFamily: font.sans,
     fontSize: typeScale.sm,
     color: palette.fg1,
     textAlign: 'end',

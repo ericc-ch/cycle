@@ -12,8 +12,9 @@ export const palette = stylex.defineVars({
 })
 
 export const font = stylex.defineVars({
+  // One family for now. JetBrains Mono was removed; add a second group here
+  // and a matching token in theme.css when a mono face comes back.
   sans: 'var(--font-sans)',
-  mono: 'var(--font-mono)',
 })
 
 export const typeScale = stylex.defineVars({

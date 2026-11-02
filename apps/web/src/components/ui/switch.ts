@@ -51,7 +51,7 @@ const styles = stylex.create({
     cursor: 'pointer',
   },
   state: {
-    fontFamily: font.mono,
+    fontFamily: font.sans,
     fontSize: typeScale.sm,
     color: palette.fg1,
   },

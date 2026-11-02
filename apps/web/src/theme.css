@@ -12,8 +12,6 @@
   --halo: light-dark(rgb(17 17 17 / 0.28), rgb(0 0 0 / 0.66));
   --font-sans:
     'Plus Jakarta Sans Variable', ui-sans-serif, system-ui, sans-serif;
-  --font-mono:
-    'JetBrains Mono Variable', ui-monospace, 'SFMono-Regular', Menlo, monospace;
 }
 
 [data-theme='light'] {

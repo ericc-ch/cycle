@@ -1,5 +1,4 @@
 import '@fontsource-variable/plus-jakarta-sans/wght.css'
-import '@fontsource-variable/jetbrains-mono/wght.css'
 import './theme.css'
 import { Runtime } from 'foldkit'
 
