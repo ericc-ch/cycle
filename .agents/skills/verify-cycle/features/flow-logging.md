@@ -13,7 +13,7 @@ deterministic
 
 ## How to get to it (user POV)
 
-Open the app. Tap any day in the two-week strip (the last cell is today). Pick a flow level. The big status line changes from a prediction to `Day N` plus `Bleeding · light`. Reload; it is still there.
+Open the app. Tap any day in the month calendar (today's cell is marked). Pick a flow level. The big status line changes from a prediction to `Day N` plus `Bleeding · light`. Reload; it is still there.
 
 ## Driving it with the CDP harness
 
@@ -22,12 +22,12 @@ Open the app. Tap any day in the two-week strip (the last cell is today). Pick a
 node .agents/skills/verify-cycle/scripts/drive.mjs flow
 ```
 
-The flow finds the last `button[aria-pressed]` (today's cell) by its `aria-label`, clicks through real mouse events, reads `[role="status"]` and `localStorage.getItem('cycle.logs')`, then reloads and repeats.
+The flow finds today's cell (`[data-slot="calendar-cell"][data-today] button`) by its `aria-label`, clicks through real mouse events, reads `[role="status"]` and `localStorage.getItem('cycle.logs')`, then reloads and repeats.
 
 ## Gotchas
 
-- Dates are real. Never hard-code a cell label; the strip is relative to the machine clock. Find today by taking the last `button[aria-pressed]`.
-- The day cell's `aria-label` is `"Mon 2, nothing logged"`; `dayOfMonthLabel` has no month, so do not match on "2 Nov".
+- Dates are real. Never hard-code a cell label; the calendar is built from the machine clock. Find today by `[data-slot="calendar-cell"][data-today]`.
+- The day cell's `aria-label` is the full date, e.g. `"Tuesday, October 20, 2026"`. Past today the cell is disabled, so it cannot be logged.
 - `cycle.logs` is an array of `{ date, flow }`. The app sorts it; do not assert insertion order across runs.
 - The drive starts a fresh Chrome profile, so `localStorage` begins empty. Do not point it at your normal browser profile.
 - Prediction can be switched off on the About tab. If a prior flow leaves it off, the status says `Prediction is off.` Reload before asserting prediction text.

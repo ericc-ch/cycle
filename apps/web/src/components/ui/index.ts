@@ -1,4 +1,5 @@
 export * as Button from './button'
+export * as Calendar from './calendar'
 export * as Dialog from './dialog'
 export * as Menu from './menu'
 export * as Popover from './popover'

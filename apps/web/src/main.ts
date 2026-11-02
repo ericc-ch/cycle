@@ -16,16 +16,17 @@ import {
   cycleDayFor,
   cycleLengths,
   dateKeyFromMillis,
+  dateKeyFromParts,
   dateKeyOrder,
   dayOfMonthLabel,
   flowOn,
-  formatDayNumber,
   isBleedingFlow,
   latestPeriod,
   logsSorted,
   median,
   monthDayLabel,
   parseDayNumber,
+  partsFromDateKey,
   periodsFrom,
   stateFor,
   weekdayLabel,
@@ -35,6 +36,7 @@ import * as stylex from '@stylexjs/stylex'
 
 import {
   Button,
+  Calendar,
   Dialog,
   Menu,
   Popover,
@@ -46,7 +48,7 @@ import {
 import { font, palette, space, typeScale } from './tokens.stylex.js'
 
 const LOGS_STORAGE_KEY = 'cycle.logs'
-const DAYS_SHOWN = 14
+const CALENDAR_ID = 'cycle-calendar'
 const TABS_ID = 'cycle-tabs'
 const FLOW_ID = 'flow'
 const TOOLTIP_ID = 'confidence'
@@ -87,6 +89,7 @@ export const Model = Schema.Struct({
   acknowledgedLateOn: Schema.Option(Schema.String),
   tab: Schema.Literals(['Today', 'History', 'About']),
   isPredicting: Schema.Boolean,
+  calendar: Calendar.Model,
   tabs: Tabs.Model,
   flow: RadioGroup.Model,
   tooltip: Tooltip.Model,
@@ -100,7 +103,6 @@ export type Model = typeof Model.Type
 // MESSAGE
 
 export const Message = defineMessageUnion({
-  SelectedDay: { date: Schema.String },
   LoggedFlow: { date: Schema.String, flow: FlowSchema },
   ClearedDay: { date: Schema.String },
   AcknowledgedLate: { date: Schema.String },
@@ -110,6 +112,7 @@ export const Message = defineMessageUnion({
   ClearedAllLogs: {},
   OpenedAbout: {},
 
+  GotCalendarMessage: { message: Calendar.Message },
   GotTabsMessage: { message: Tabs.Message },
   GotFlowMessage: { message: RadioGroup.Message },
   GotTooltipMessage: { message: Tooltip.Message },
@@ -130,6 +133,13 @@ export type Flags = typeof Flags.Type
 
 // INIT
 
+const calendarDateFor = (key: DateKey) =>
+  Option.getOrElse(partsFromDateKey(key), () => ({
+    year: 1970,
+    month: 1,
+    day: 1,
+  }))
+
 export const init: Runtime.ApplicationInit<Model, Message, Flags> = flags => ({
   model: {
     logs: Option.getOrElse(flags.logs, () => []),
@@ -138,6 +148,12 @@ export const init: Runtime.ApplicationInit<Model, Message, Flags> = flags => ({
     acknowledgedLateOn: Option.none(),
     tab: 'Today',
     isPredicting: true,
+    calendar: Calendar.init({
+      id: CALENDAR_ID,
+      today: calendarDateFor(flags.today),
+      maxDate: calendarDateFor(flags.today),
+      locale: Calendar.mondayFirstLocale,
+    }),
     tabs: Tabs.init({ id: TABS_ID }),
     flow: RadioGroup.init({ id: FLOW_ID }),
     tooltip: Tooltip.init({ id: TOOLTIP_ID }),
@@ -201,6 +217,17 @@ const foldDialogOutMessage = Dialog.OutMessage.match<UpdateStep>({
   Closed: () => model => ({ model }),
 })
 
+const foldCalendarOutMessage = Calendar.OutMessage.match<UpdateStep>({
+  SelectedDate:
+    ({ date }) =>
+    model => ({
+      model: modifyFields(model, {
+        selectedDate: () => dateKeyFromParts(date),
+      }),
+    }),
+  ChangedViewMonth: () => model => ({ model }),
+})
+
 const foldTabsOutMessage = Tabs.OutMessage.match<
   UpdateStep,
   Tabs.OutMessage<Tab>
@@ -232,6 +259,15 @@ const foldTooltipOutMessage = Tooltip.OutMessage.match<UpdateStep>({
 const foldLegendOutMessage = Popover.OutMessage.match<UpdateStep>({
   Opened: () => model => ({ model }),
   Closed: () => model => ({ model }),
+})
+
+const foldCalendar = Update.foldChild({
+  update: Calendar.update,
+  read: (model: Model) => Option.some(model.calendar),
+  write: (model, nextCalendar) =>
+    modifyFields(model, { calendar: () => nextCalendar }),
+  toParentMessage: message => Message.GotCalendarMessage({ message }),
+  foldOutMessage: foldCalendarOutMessage,
 })
 
 const foldTabs = Update.foldChild({
@@ -335,10 +371,6 @@ const foldMenu = Update.foldChild({
 
 export const update = (model: Model, message: Message) =>
   Message.match<UpdateReturn>(message, {
-    SelectedDay: ({ date }) => ({
-      model: modifyFields(model, { selectedDate: () => date }),
-    }),
-
     LoggedFlow: ({ date, flow }) => logFlow(model, date, flow),
 
     ClearedDay: ({ date }) => clearDay(model, date),
@@ -366,6 +398,7 @@ export const update = (model: Model, message: Message) =>
 
     OpenedAbout: () => foldAboutDialogOpen(model),
 
+    GotCalendarMessage: ({ message }) => foldCalendar(model, message),
     GotTabsMessage: ({ message }) => foldTabs(model, message),
     GotFlowMessage: ({ message }) => foldFlow(model, message),
     GotTooltipMessage: ({ message }) => foldTooltip(model, message),
@@ -438,43 +471,6 @@ const styles = stylex.create({
   quiet: {
     color: palette.fg1,
     fontSize: typeScale.sm,
-  },
-  grid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(7, 1fr)',
-    gap: space.xs,
-  },
-  cell: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: space.xs,
-    minHeight: '48px',
-    borderWidth: '1px',
-    borderStyle: 'solid',
-    borderColor: 'transparent',
-    backgroundColor: 'transparent',
-    cursor: 'pointer',
-    padding: 0,
-    ':focus-visible': {
-      outlineWidth: '2px',
-      outlineStyle: 'solid',
-      outlineColor: palette.fg0,
-      outlineOffset: '2px',
-    },
-  },
-  cellSelected: {
-    borderColor: palette.fg0,
-  },
-  cellNumber: {
-    fontFamily: font.sans,
-    fontSize: typeScale.sm,
-    color: palette.fg1,
-    lineHeight: 1,
-  },
-  cellNumberToday: {
-    color: palette.fg0,
   },
   mark: {
     width: '16px',
@@ -816,81 +812,40 @@ const overdueView = (
   })
 }
 
-const dayCellView = (
-  model: Model,
-  dayNumber: number,
-  h: HtmlBuilder<Message>,
-): Html => {
-  const date = formatDayNumber(dayNumber)
-  const maybeFlow = flowOn(model.logs, date)
-  const isSelected = date === model.selectedDate
-  const isToday = date === model.today
-  const classes = stylex.attrs(
-    styles.cell,
-    isSelected && styles.cellSelected,
-  ).class
+const flowMark = (model: Model, date: DateKey, h: HtmlBuilder<Message>): Html =>
+  h.span([
+    h.Attribute(
+      'class',
+      [
+        stylex.attrs(styles.mark).class,
+        stylex.attrs(markStyle(flowOn(model.logs, date))).class,
+      ]
+        .filter(Boolean)
+        .join(' '),
+    ),
+  ])
 
-  return h.keyed('button')(
-    date,
-    [
-      h.Type('button'),
-      h.OnClick(Message.SelectedDay({ date })),
-      h.AriaLabel(
-        `${weekdayLabel(dayNumber)} ${dayOfMonthLabel(dayNumber)}, ${Option.match(
-          maybeFlow,
+const calendarView = (model: Model, h: HtmlBuilder<Message>): Html =>
+  h.submodel({
+    slotId: CALENDAR_ID,
+    model: model.calendar,
+    view: Calendar.view,
+    viewInputs: {
+      maybeSelectedDate: partsFromDateKey(model.selectedDate),
+      previousMonthLabel: 'Previous month',
+      nextMonthLabel: 'Next month',
+      toView: attributes =>
+        Calendar.render(
+          attributes,
           {
-            onNone: () => 'nothing logged',
-            onSome: flowLabel,
+            decoration: cell => flowMark(model, dateKeyFromParts(cell.date), h),
+            previousLabel: 'Prev',
+            nextLabel: 'Next',
           },
-        )}`,
-      ),
-      h.AriaPressed(isSelected ? 'true' : 'false'),
-      h.Attribute('class', classes ?? ''),
-    ],
-    [
-      h.span(
-        [
-          h.Attribute(
-            'class',
-            [
-              stylex.attrs(styles.cellNumber).class,
-              isToday ? stylex.attrs(styles.cellNumberToday).class : '',
-            ]
-              .filter(Boolean)
-              .join(' '),
-          ),
-        ],
-        [dayOfMonthLabel(dayNumber)],
-      ),
-      h.span([
-        h.Attribute(
-          'class',
-          [
-            stylex.attrs(styles.mark).class,
-            stylex.attrs(markStyle(maybeFlow)).class,
-          ]
-            .filter(Boolean)
-            .join(' '),
+          h,
         ),
-      ]),
-    ],
-  )
-}
-
-const dayGridView = (model: Model, h: HtmlBuilder<Message>): Html =>
-  Option.match(parseDayNumber(model.today), {
-    onNone: () => h.empty,
-    onSome: todayNumber =>
-      h.div(
-        [h.Attribute('class', stylex.attrs(styles.grid).class ?? '')],
-        Array.map(
-          Array.makeBy(
-            DAYS_SHOWN,
-            index => todayNumber - (DAYS_SHOWN - 1) + index,
-          ),
-          dayNumber => dayCellView(model, dayNumber, h),
-        ),
-      ),
+    },
+    toParentMessage: message => Message.GotCalendarMessage({ message }),
   })
 
 const flowEditorView = (model: Model, h: HtmlBuilder<Message>): Html => {
@@ -1013,7 +968,7 @@ const todayView = (
     [h.Attribute('class', stylex.attrs(styles.section).class ?? '')],
     [
       statusView(model, periods, h),
-      dayGridView(model, h),
+      calendarView(model, h),
       flowEditorView(model, h),
       overdueView(model, periods, h),
       legendView(model, h),

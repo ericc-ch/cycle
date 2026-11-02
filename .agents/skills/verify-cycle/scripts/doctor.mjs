@@ -52,7 +52,7 @@ try {
     ['Data menu', '[data-slot="dropdown-menu-trigger"]'],
     ['Today tab', '[data-slot="tabs-trigger"]', 'Today'],
     ['History tab', '[data-slot="tabs-trigger"]', 'History'],
-    ['day grid cell', 'button[aria-pressed]'],
+    ['calendar day', '[data-slot="calendar-cell"][data-today] button'],
     ['flow option', '[role="radio"]', 'Light'],
   ]
 

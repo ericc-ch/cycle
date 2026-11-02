@@ -44,6 +44,28 @@ export const dateKeyFromMillis = (millis: number): DateKey => {
   return `${date.getFullYear()}-${month}-${day}`
 }
 
+export type DateParts = Readonly<{
+  year: number
+  month: number
+  day: number
+}>
+
+/** Splits a date key into the parts a calendar wants. `None` for a key that
+ *  is not a real date, same rule as `parseDayNumber`. */
+export const partsFromDateKey = (key: DateKey): Option.Option<DateParts> =>
+  Option.map(parseDayNumber(key), dayNumber => {
+    const date = new Date(dayNumber * MILLISECONDS_PER_DAY)
+
+    return {
+      year: date.getUTCFullYear(),
+      month: date.getUTCMonth() + 1,
+      day: date.getUTCDate(),
+    }
+  })
+
+export const dateKeyFromParts = ({ year, month, day }: DateParts): DateKey =>
+  `${year}-${`${month}`.padStart(2, '0')}-${`${day}`.padStart(2, '0')}`
+
 export const weekdayLabel = (dayNumber: number): string =>
   new Date(dayNumber * MILLISECONDS_PER_DAY).toLocaleDateString('en-GB', {
     weekday: 'short',

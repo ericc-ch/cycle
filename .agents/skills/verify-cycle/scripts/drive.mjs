@@ -79,8 +79,8 @@ const flows = {
         ['legend trigger', '[data-slot="popover-trigger"]'],
         ['confidence trigger', '[data-slot="tooltip-trigger"]'],
       ]
-      for (const cell of document.querySelectorAll('button[aria-pressed]')) {
-        controls.push(['day ' + cell.getAttribute('aria-label'), 'button[aria-pressed]', cell.getAttribute('aria-label')])
+      for (const cell of document.querySelectorAll('[data-slot="calendar-day"]')) {
+        controls.push(['day ' + cell.getAttribute('aria-label'), '[data-slot="calendar-day"]', cell.getAttribute('aria-label')])
       }
       for (const radio of document.querySelectorAll('[role="radio"]')) {
         controls.push(['flow ' + (radio.textContent ?? '').trim(), '[role="radio"]', (radio.textContent ?? '').trim()])
@@ -138,8 +138,8 @@ const flows = {
     await seed(browser, [])
 
     const dayLabel = await browser.evaluate(`(() => {
-      const cells = [...document.querySelectorAll('button[aria-pressed]')]
-      return cells.at(-1)?.getAttribute('aria-label') ?? null
+      const cell = document.querySelector('[data-slot="calendar-cell"][data-today] button')
+      return cell?.getAttribute('aria-label') ?? null
     })()`)
 
     must(
@@ -148,7 +148,7 @@ const flows = {
       typeof dayLabel === 'string',
       String(dayLabel),
     )
-    await browser.click('button[aria-pressed]', dayLabel)
+    await browser.click('[data-slot="calendar-day"]', dayLabel)
 
     const checked = await browser.evaluate(
       `document.querySelector('[role="radio"][data-state="checked"]')?.textContent?.trim() ?? null`,

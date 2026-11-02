@@ -33,7 +33,7 @@ Use a port nobody else is on. `5173` is the normal dev server; this skill defaul
 
 Ready means the script printed `ready on http://127.0.0.1:5273/`. It waits for the HTTP root, not just the process. Logs: `.audit/dev-server.log`.
 
-The app reads `today` from the clock at boot and its logs from `localStorage` under `cycle.logs`. Each drive run starts a fresh Chrome profile, so it starts with no logs and today's real date. Do not hard-code dates in a flow; find today's cell by its `aria-pressed` attribute.
+The app reads `today` from the clock at boot and its logs from `localStorage` under `cycle.logs`. Each drive run starts a fresh Chrome profile, so it starts with no logs and today's real date. Do not hard-code dates in a flow; find today's cell by its `data-today` attribute.
 
 ## 2. Doctor
 
@@ -68,7 +68,7 @@ Flows live in `scripts/drive.mjs` and map to `features/*.md`:
 
 Each run prints a line per check and exits non-zero on the first failed flow. Screenshots and `report.json` land in `.audit/evidence/<run-id>/`.
 
-Selectors are stable handles, not coordinates: `[data-slot="tabs-trigger"]`, `button[aria-pressed]` for day cells, `[role="radio"]`, `[role="menuitem"]`, `[data-slot="dialog-content"]`, `[role="status"]`.
+Selectors are stable handles, not coordinates: `[data-slot="tabs-trigger"]`, `[data-slot="calendar-day"]` for day cells (the cell wrapper carries `data-today`), `[role="radio"]`, `[role="menuitem"]`, `[data-slot="dialog-content"]`, `[role="status"]`.
 
 Hover and keyboard are real input events (`Input.dispatchMouseEvent`, `Input.dispatchKeyEvent`), not `element.click()`, so pointer and Escape paths are exercised.
 

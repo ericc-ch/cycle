@@ -16,7 +16,7 @@ nub run check    # typecheck, tests, lint, build
 
 ## What it does
 
-- Tap any day in the last two weeks and set flow: spotting, light, medium, heavy.
+- Tap any day in the month calendar and set flow: spotting, light, medium, heavy.
 - Periods are derived from those days, not from a start/end form. A bleeding day starts a new period only after two clear days, and spotting never starts one.
 - The next period is shown as a date range, never a single date, with a confidence word.
 - If the cycle runs past its range the app asks a question instead of showing a red day counter.

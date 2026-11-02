@@ -1,11 +1,14 @@
 export {
   type DateKey,
+  type DateParts,
+  dateKeyFromParts,
   dateKeyFromMillis,
   dateKeyOrder,
   dayOfMonthLabel,
   formatDayNumber,
   monthDayLabel,
   parseDayNumber,
+  partsFromDateKey,
   shiftDateKey,
   weekdayLabel,
 } from './date'

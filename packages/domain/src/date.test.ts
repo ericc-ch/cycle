@@ -3,9 +3,11 @@ import { describe, expect, test } from 'vitest'
 
 import {
   dateKeyFromMillis,
+  dateKeyFromParts,
   dayOfMonthLabel,
   formatDayNumber,
   parseDayNumber,
+  partsFromDateKey,
   shiftDateKey,
   weekdayLabel,
 } from './date'
@@ -64,5 +66,24 @@ describe('labels', () => {
     const millis = Date.UTC(2026, 10, 2, 12, 0, 0)
 
     expect(dateKeyFromMillis(millis)).toMatch(/^2026-11-0[12]$/)
+  })
+})
+
+describe('parts', () => {
+  test('splits a date key for a calendar', () => {
+    expect(partsFromDateKey('2026-10-06')).toStrictEqual(
+      Option.some({ year: 2026, month: 10, day: 6 }),
+    )
+  })
+
+  test('rejects a key that is not a real date', () => {
+    expect(partsFromDateKey('2026-02-30')).toStrictEqual(Option.none())
+    expect(partsFromDateKey('06/10/2026')).toStrictEqual(Option.none())
+  })
+
+  test('pads the month and day back into a key', () => {
+    expect(dateKeyFromParts({ year: 2026, month: 1, day: 5 })).toBe(
+      '2026-01-05',
+    )
   })
 })

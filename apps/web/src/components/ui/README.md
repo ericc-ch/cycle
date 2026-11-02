@@ -2,7 +2,7 @@
 
 Styled Foldkit components, copied into the app the way shadcn copies its components: the code lives here, the app owns it, and there is no package to publish or upgrade.
 
-`@foldkit/ui` owns the behaviour: ARIA roles, keyboard navigation, focus management, and the submodel state for Tabs, RadioGroup, Menu, Popover, Tooltip and Dialog. These files own the markup and the styles, supplied through each component's `toView` hook.
+`@foldkit/ui` owns the behaviour: ARIA roles, keyboard navigation, focus management, and the submodel state for Calendar, Tabs, RadioGroup, Menu, Popover, Tooltip and Dialog. These files own the markup and the styles, supplied through each component's `toView` hook.
 
 The structure follows shadcn's component API where the two model concepts line up: named parts, `variant`/`size` props, `data-slot` / `data-state` / `data-variant` markers. The comparison is against the `new-york-v4` registry; pull `https://ui.shadcn.com/r/styles/new-york-v4/<name>.json` when re-checking a part name.
 
@@ -18,8 +18,9 @@ The structure follows shadcn's component API where the two model concepts line u
 | `PopoverTrigger` / `PopoverContent`                                                                                 | `Popover.trigger` / `Popover.content` (`Popover.render` composes both)                                                                            |
 | `Dialog` / `DialogOverlay` / `DialogContent` / `DialogTitle` / `DialogDescription` / `DialogFooter` / `DialogClose` | `Dialog.root` / `Dialog.content` / `Dialog.title` / `Dialog.description` / `Dialog.footer` / `Dialog.closeButton` (`Dialog.render` composes them) |
 | `DropdownMenuTrigger` / `DropdownMenuContent` / `DropdownMenuItem`                                                  | `Menu.renderConfig` marks those parts with `data-slot`, because `@foldkit/ui`'s Menu owns its markup                                              |
+| `Calendar`                                                                                                          | `Calendar.render` (month view; the app passes a `decoration` for the flow mark under each day)                                                    |
 
-`data-slot` values match shadcn's names (`button`, `tabs-list`, `tabs-trigger`, `tabs-content`, `dialog-content`, `dialog-overlay`, `dialog-title`, `dialog-description`, `dialog-footer`, `dialog-close`, `dropdown-menu-trigger`, `dropdown-menu-content`, `dropdown-menu-item`, `popover-trigger`, `popover-content`, `tooltip-trigger`, `tooltip-content`, `radio-group`, `radio-group-item`, `switch`, `switch-thumb`, `switch-label`). `data-state` / `data-variant` / `data-size` follow shadcn's conventions, and the scene tests assert a few of them so they cannot silently disappear.
+`data-slot` values match shadcn's names (`button`, `tabs-list`, `tabs-trigger`, `tabs-content`, `dialog-content`, `dialog-overlay`, `dialog-title`, `dialog-description`, `dialog-footer`, `dialog-close`, `dropdown-menu-trigger`, `dropdown-menu-content`, `dropdown-menu-item`, `popover-trigger`, `popover-content`, `tooltip-trigger`, `tooltip-content`, `radio-group`, `radio-group-item`, `switch`, `switch-thumb`, `switch-label`). The calendar has no shadcn parts to copy, so its handles are `calendar`, `calendar-previous-month`, `calendar-next-month`, `calendar-grid`, `calendar-cell` and `calendar-day`. `data-state` / `data-variant` / `data-size` follow shadcn's conventions, and the scene tests assert a few of them so they cannot silently disappear.
 
 A closed native `<dialog>` must stay `display: none`. The UA sheet hides it, but any author `display` overrides that, and the component's inline `width/height: 100%` then turns the closed element into a full-page sheet that swallows every click. `Dialog.root` applies its grid only while `isVisible`; do not put a `display` on the base dialog class. The `clicks` flow and the doctor check this.
 

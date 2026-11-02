@@ -119,15 +119,13 @@ describe('view', () => {
     )
   })
 
-  test('picking a day moves the selection', () => {
+  test('the calendar shows the month and today', () => {
     scene(
       { update, view },
       given(baseModel),
-      click(role('button', { name: /Tue 13,/ })),
-      expect(role('button', { name: /Tue 13,/ })).toHaveAttr(
-        'aria-pressed',
-        'true',
-      ),
+      expect(role('grid', { name: /Calendar/ })).toExist(),
+      expect(role('heading', { name: 'October 2026' })).toExist(),
+      expect(role('button', { name: 'Tuesday, October 20, 2026' })).toExist(),
     )
   })
 })

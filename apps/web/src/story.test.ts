@@ -2,7 +2,7 @@ import { Option } from 'effect'
 import { Command, given, message, model, story } from 'foldkit/story'
 import { describe, expect, test } from 'vitest'
 
-import { Menu, Tabs } from './components/ui'
+import { Calendar, Menu, Tabs } from './components/ui'
 import { Message, type Model, SaveLogs, init, update } from './main'
 
 const TODAY = '2026-10-20'
@@ -56,16 +56,17 @@ describe('init', () => {
 })
 
 describe('update', () => {
-  test('SelectedDay moves the editor to that day', () => {
-    story(
-      update,
-      given(baseModel),
-      message(Message.SelectedDay({ date: '2026-10-06' })),
-      model(model => {
-        expect(model.selectedDate).toBe('2026-10-06')
+  test('the calendar moves the editor to the chosen day', () => {
+    const result = update(
+      baseModel,
+      Message.GotCalendarMessage({
+        message: Calendar.Message.ClickedDay({
+          date: { year: 2026, month: 10, day: 6 },
+        }),
       }),
-      Command.expectNone(),
     )
+
+    expect(result.model.selectedDate).toBe('2026-10-06')
   })
 
   test('LoggedFlow appends a day and saves', () => {
