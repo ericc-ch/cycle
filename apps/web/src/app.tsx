@@ -66,7 +66,7 @@ const isTab = (value: string): value is Tab =>
 const tabIcon = (tab: Tab) => {
   switch (tab) {
     case 'Calendar':
-      return <BrandMark mono className="size-4" />
+      return <BrandMark mono className="size-5" />
     case 'History':
       return <HistoryIcon aria-hidden="true" />
     case 'About':
