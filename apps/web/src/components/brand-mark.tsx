@@ -21,9 +21,19 @@ const TONE_CLASS = {
   spotting: 'fill-spotting',
 } as const
 
+/** On a control that speaks in ink, the mark keeps its three weights as
+ *  three opacities of `currentColor`. */
+const MONO_OPACITY = {
+  muted: 0.32,
+  bleeding: 1,
+  spotting: 0.6,
+} as const
+
 export const BrandMark = ({
+  mono = false,
   className,
 }: {
+  readonly mono?: boolean
   readonly className?: string | undefined
 }) => (
   <svg
@@ -35,7 +45,9 @@ export const BrandMark = ({
       width="64"
       height="64"
       rx="10"
-      className="fill-bg-1 stroke-line"
+      className={
+        mono ? 'fill-transparent stroke-current' : 'fill-bg-1 stroke-line'
+      }
       strokeWidth="1"
       vectorEffect="non-scaling-stroke"
     />
@@ -45,7 +57,8 @@ export const BrandMark = ({
         cx={dot.cx}
         cy={dot.cy}
         r={dot.tone === 'muted' ? 4.5 : 5.5}
-        className={TONE_CLASS[dot.tone]}
+        className={mono ? 'fill-current' : TONE_CLASS[dot.tone]}
+        fillOpacity={mono ? MONO_OPACITY[dot.tone] : undefined}
       />
     ))}
   </svg>
