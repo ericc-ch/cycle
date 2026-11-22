@@ -14,7 +14,7 @@ This skill checks three promises of Cycle's multi-device sync protocol across ev
 
 ## Coverage record
 
-- **Last confirmed commit**: `ecd2bd9cd2eb4b608ca2bc63d64589c2d3c52e06`
+- **Last confirmed commit**: `4c9a1a527293fb9efd7a0ce912c6ffcb954abf6d`
 - **Covered files and functions**:
   - `packages/sync/src/snapshot.ts` — `pickEntry`, `mergeSnapshots`, `applyLogsDiff`, `nextTimestamp`, `sameSnapshot`
   - `packages/sync/src/client.ts` — `syncVault`, `putOnce` (`GET` -> merge -> `PUT` with `expectedVersion` -> `409` retry)
@@ -25,7 +25,7 @@ This skill checks three promises of Cycle's multi-device sync protocol across ev
 Before trusting a pass, check whether any covered file changed since the sync commit:
 
 ```sh
-git log --oneline ecd2bd9cd2eb4b608ca2bc63d64589c2d3c52e06..HEAD -- \
+git log --oneline 4c9a1a527293fb9efd7a0ce912c6ffcb954abf6d..HEAD -- \
   packages/sync/src/snapshot.ts \
   packages/sync/src/client.ts \
   apps/api/src/worker.ts \
