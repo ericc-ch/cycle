@@ -18,6 +18,7 @@ import {
   flowAt,
   latestPeriodAt,
   monthDayLabel,
+  predictedWindows,
   sameDay,
   stateFor,
   weekdayLabel,
@@ -33,8 +34,8 @@ export const FlowMark = ({ flow }: { readonly flow: Flow | null }) => (
   <span
     aria-hidden="true"
     className={cn(
-      'h-0.5 w-4 rounded-xs bg-transparent',
-      flow === 'Spotting' && 'w-2 bg-spotting',
+      'size-3 rounded-xs border border-transparent bg-transparent',
+      flow === 'Spotting' && 'border-spotting/35 bg-spotting/20',
       flow === 'Bleeding' && 'bg-bleeding',
     )}
   />
@@ -116,16 +117,6 @@ const CycleStatus = ({
     )
   }
 
-  if (!model.isPredicting) {
-    return (
-      <CycleStatusCard
-        headline={`Cycle day ${cycleDay}`}
-        secondary={`Last period started ${weekdayLabel(lastPeriod.start)} ${lastStartLabel}`}
-        tertiary="Prediction is off."
-      />
-    )
-  }
-
   const status = CycleStateSchema.match(stateFor(periods, model.today), {
     NoCycles: () => ({
       headline: `Cycle day ${cycleDay}`,
@@ -173,12 +164,8 @@ const OverdueNotice = ({
   readonly model: Model
   readonly periods: ReadonlyArray<Period>
   readonly dispatch: Dispatch<Action>
-}) => {
-  if (!model.isPredicting) {
-    return null
-  }
-
-  return CycleStateSchema.match(stateFor(periods, model.today), {
+}) =>
+  CycleStateSchema.match(stateFor(periods, model.today), {
     NoCycles: () => null,
     Expected: () => null,
     Late: () => null,
@@ -202,7 +189,6 @@ const OverdueNotice = ({
         </div>
       ),
   })
-}
 
 const EditCard = ({
   draft,
@@ -298,6 +284,11 @@ export const TodayView = ({
     rangeStart === null
       ? new Set<number>()
       : new Set(datesBetween(rangeStart, rangeEnd ?? rangeStart).map(dayNumber))
+  const predictedDays = new Set<number>(
+    predictedWindows(periods, model.today).flatMap(window =>
+      datesBetween(window.low, window.high).map(dayNumber),
+    ),
+  )
 
   return (
     <div className="flex flex-col gap-base">
@@ -347,8 +338,9 @@ export const TodayView = ({
             : (start, end) => dispatch({ type: 'DraggedRange', start, end })
         }
         onRangeEnd={() => dispatch({ type: 'EndedRange' })}
-        decoration={date => <FlowMark flow={flowAt(logs, date)} />}
+        flowFor={date => flowAt(logs, date)}
         isInRange={date => rangeDays.has(dayNumber(date))}
+        isPredicted={date => predictedDays.has(dayNumber(date))}
       />
 
       <div className="flex flex-col gap-snug">

@@ -54,6 +54,7 @@ export {
   forecast,
   isLikelySkip,
   median,
+  predictedWindows,
   stateFor,
   withoutLikelySkips,
 } from './predict.ts'

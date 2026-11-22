@@ -31,13 +31,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
   Tabs,
   TabsContent,
   TabsList,
@@ -66,7 +59,7 @@ const isTab = (value: string): value is Tab =>
 const tabIcon = (tab: Tab) => {
   switch (tab) {
     case 'Calendar':
-      return <BrandMark mono className="size-5" />
+      return <BrandMark mono className="size-4" />
     case 'History':
       return <HistoryIcon aria-hidden="true" />
     case 'About':
@@ -365,34 +358,6 @@ export const AppShell = ({
           </Tabs>
         </main>
       </div>
-
-      <Dialog
-        isOpen={model.dialog === 'about'}
-        onOpenChange={onDialogChange('about')}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>How the range is calculated</DialogTitle>
-            <DialogDescription>
-              Uses the median of your last six cycles so one unusual cycle
-              shifts it less.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-snug text-fg-1">
-            <p>
-              The window is roughly an 80% band from your cycle spread, with a
-              minimum width, rounded outward to whole days.
-            </p>
-            <p>
-              Each late day shifts the window forward by less than a day. Past
-              the window, predictions pause.
-            </p>
-          </div>
-          <DialogFooter>
-            <DialogClose variant="outline">Close</DialogClose>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <AlertDialog
         isOpen={model.dialog === 'clear'}

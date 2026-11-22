@@ -120,7 +120,7 @@ describe('sync worker', () => {
 
     // Initial PUT -> 200 v1
     const ct1 = await Effect.runPromise(
-      encryptSnapshot(creds, emptySnapshot(true)),
+      encryptSnapshot(creds, emptySnapshot()),
     )
     const created = await worker.fetch(
       new Request('https://cycle.ericc.ch/api/sync', {
@@ -144,7 +144,7 @@ describe('sync worker', () => {
 
     // Stale expectedVersion -> 409 with latest ciphertext
     const ct2 = await Effect.runPromise(
-      encryptSnapshot(creds, emptySnapshot(false)),
+      encryptSnapshot(creds, emptySnapshot()),
     )
     const conflict = await worker.fetch(
       new Request('https://cycle.ericc.ch/api/sync', {
@@ -162,7 +162,7 @@ describe('sync worker', () => {
       syncVault({
         baseUrl: 'https://cycle.ericc.ch',
         credentials: creds,
-        local: emptySnapshot(false),
+        local: emptySnapshot(),
         fetchFn: (input, init) => worker.fetch(new Request(input, init), env),
       }),
     )

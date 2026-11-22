@@ -1,4 +1,3 @@
-import type * as React from 'react'
 import { useEffect, useRef, useState } from 'react'
 import {
   Calendar as AriaCalendar,
@@ -19,6 +18,7 @@ import {
 } from 'lucide-react'
 
 import {
+  type Flow,
   type PlainDate,
   dayOfMonthLabel,
   formatPlainDate,
@@ -56,8 +56,9 @@ export type CalendarProps = {
     | ((start: PlainDate, end: PlainDate) => void)
     | undefined
   readonly onRangeEnd?: (() => void) | undefined
-  readonly decoration?: (date: PlainDate) => React.ReactNode
+  readonly flowFor?: (date: PlainDate) => Flow | null
   readonly isInRange?: (date: PlainDate) => boolean
+  readonly isPredicted?: (date: PlainDate) => boolean
   readonly viewMode?: CalendarViewMode
   readonly onViewModeChange?: ((mode: CalendarViewMode) => void) | undefined
   readonly previousLabel?: string
@@ -77,8 +78,9 @@ export const Calendar = ({
   onRangeEnd,
   readOnly = false,
   onLongPress,
-  decoration,
+  flowFor,
   isInRange,
+  isPredicted,
   viewMode: controlledViewMode,
   onViewModeChange,
   previousLabel = 'Prev',
@@ -172,7 +174,11 @@ export const Calendar = ({
       const element = target instanceof Element ? target : null
       const day = element?.closest('[data-slot="calendar-day"]')
 
-      if (!day || day.hasAttribute('data-disabled')) {
+      if (
+        !day ||
+        day.hasAttribute('data-disabled') ||
+        day.hasAttribute('data-unavailable')
+      ) {
         return null
       }
 
@@ -278,6 +284,9 @@ export const Calendar = ({
     }
   }, [])
 
+  const maxViewYear = maxDate.year + 1
+  const maxViewDate = parsePlainDate(`${maxViewYear}-12-31`) ?? maxDate
+
   if (viewMode === 'year') {
     return (
       <div
@@ -316,9 +325,9 @@ export const Calendar = ({
             size="icon-sm"
             data-slot="calendar-next-month"
             aria-label="Next year"
-            disabled={yearValue >= maxDate.year}
+            disabled={yearValue >= maxViewYear}
             onClick={() =>
-              setYearValue(current => Math.min(maxDate.year, current + 1))
+              setYearValue(current => Math.min(maxViewYear, current + 1))
             }
           >
             <ChevronRightIcon aria-hidden="true" />
@@ -356,7 +365,7 @@ export const Calendar = ({
                   aria-label={monthYearLabel(firstInMonth)}
                   data-slot="calendar-grid"
                   onContextMenu={event => event.preventDefault()}
-                  className="w-full table-fixed select-none border-collapse [-webkit-touch-callout:none]"
+                  className="-mx-0.5 w-[calc(100%+0.25rem)] table-fixed select-none border-separate border-spacing-0.5 [-webkit-touch-callout:none]"
                 >
                   <tbody>
                     {weeks.map((week, weekIndex) => (
@@ -375,10 +384,14 @@ export const Calendar = ({
                           const isCursor =
                             !readOnly && sameDay(date, selected)
                           const inRange = isInRange?.(date) ?? false
+                          const flow = flowFor?.(date) ?? null
+                          const predicted =
+                            flow === null && (isPredicted?.(date) ?? false)
                           const isToday = sameDay(date, today)
                           const isHeld =
                             gesture.phase === 'pressed' &&
                             sameDay(gesture.press.start, date)
+                          const isSelected = isCursor || inRange || isHeld
 
                           return (
                             <td
@@ -394,26 +407,39 @@ export const Calendar = ({
                                 data-date={formatPlainDate(date)}
                                 data-today={isToday ? '' : undefined}
                                 data-range={inRange ? '' : undefined}
+                                data-flow={flow ?? undefined}
+                                data-predicted={predicted ? 'true' : undefined}
                                 data-disabled={
                                   isDisabled ? 'true' : undefined
                                 }
                                 className={cn(
-                                  'flex min-h-6 w-full flex-col items-center justify-center gap-tight rounded-sm border border-transparent bg-transparent p-0 text-xs leading-none text-fg-1 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+                                  'flex min-h-6 w-full items-center justify-center rounded-sm border border-transparent bg-transparent p-0 text-xs leading-none text-fg-1 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
                                   readOnly
                                     ? 'cursor-default'
                                     : 'cursor-pointer',
-                                  isToday &&
-                                    'bg-accent-soft font-semibold text-accent',
-                                  (isCursor || inRange || isHeld) &&
-                                    'border-fg-0 bg-bg-1 font-semibold text-fg-0 shadow-control',
                                   isDisabled &&
-                                    'cursor-default text-fg-2 opacity-60',
+                                    (predicted
+                                      ? 'cursor-default'
+                                      : 'cursor-default text-fg-2 opacity-60'),
+                                  predicted &&
+                                    'border-dashed border-bleeding/70 text-bleeding',
+                                  flow === 'Spotting' &&
+                                    'border-spotting/35 bg-spotting/20 font-medium text-spotting',
+                                  flow === 'Bleeding' &&
+                                    'bg-bleeding font-semibold text-accent-fg',
+                                  isToday &&
+                                    (flow === null && !predicted
+                                      ? 'border-fg-0 font-semibold text-fg-0'
+                                      : 'ring-1 ring-fg-0 ring-offset-1 ring-offset-bg-0 font-semibold'),
+                                  isSelected &&
+                                    (flow === null
+                                      ? 'border-solid border-fg-0 bg-bg-1 font-semibold text-fg-0 shadow-control'
+                                      : 'border-solid border-fg-0 shadow-control'),
                                 )}
                               >
                                 <span aria-hidden="true">
                                   {dayOfMonthLabel(date)}
                                 </span>
-                                {decoration?.(date)}
                               </div>
                             </td>
                           )
@@ -437,7 +463,8 @@ export const Calendar = ({
       data-view="month"
       value={selected}
       isReadOnly
-      maxValue={maxDate}
+      maxValue={maxViewDate}
+      isDateUnavailable={date => date.compare(maxDate) > 0}
       firstDayOfWeek="mon"
       className="flex flex-col gap-snug"
     >
@@ -485,7 +512,7 @@ export const Calendar = ({
           data-slot="calendar-grid"
           weekdayStyle="short"
           onContextMenu={event => event.preventDefault()}
-          className="w-full table-fixed select-none border-separate border-spacing-tight [-webkit-touch-callout:none]"
+          className="-mx-tight w-[calc(100%+var(--spacing-tight)*2)] table-fixed select-none border-separate border-spacing-tight [-webkit-touch-callout:none]"
         >
           <CalendarGridHeader>
             {day => (
@@ -498,10 +525,14 @@ export const Calendar = ({
             {date => {
               const isCursor = !readOnly && sameDay(date, selected)
               const inRange = isInRange?.(date) ?? false
+              const flow = flowFor?.(date) ?? null
+              const predicted =
+                flow === null && (isPredicted?.(date) ?? false)
               const isToday = sameDay(date, today)
               const isHeld =
                 gesture.phase === 'pressed' &&
                 sameDay(gesture.press.start, date)
+              const isSelected = isCursor || inRange || isHeld
 
               return (
                 <CalendarCell
@@ -510,20 +541,37 @@ export const Calendar = ({
                   data-date={formatPlainDate(date)}
                   data-today={isToday ? '' : undefined}
                   data-range={inRange ? '' : undefined}
-                  className={({ isDisabled, isOutsideMonth }) =>
-                    cn(
-                      'flex min-h-11 w-full flex-col items-center justify-center gap-tight rounded-md border border-transparent bg-transparent p-0 text-sm transition-colors outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-offset-2 data-[focus-visible]:outline-ring',
+                  data-flow={flow ?? undefined}
+                  data-predicted={predicted ? 'true' : undefined}
+                  className={({ isDisabled, isUnavailable, isOutsideMonth }) => {
+                    const isUneditable = isDisabled || isUnavailable
+
+                    return cn(
+                      'flex min-h-11 w-full items-center justify-center rounded-md border border-transparent bg-transparent p-0 text-sm transition-colors outline-none data-[focus-visible]:outline-2 data-[focus-visible]:outline-offset-2 data-[focus-visible]:outline-ring',
                       readOnly ? 'cursor-default' : 'cursor-pointer',
                       isOutsideMonth && !inRange ? 'text-fg-2' : 'text-fg-1',
-                      isToday && 'bg-accent-soft font-semibold text-accent',
-                      (isCursor || inRange || isHeld) &&
-                        'border-fg-0 bg-bg-1 font-semibold text-fg-0 shadow-control',
-                      isDisabled && 'cursor-default text-fg-2 opacity-60',
+                      isUneditable &&
+                        (predicted
+                          ? 'cursor-default'
+                          : 'cursor-default text-fg-2 opacity-60'),
+                      predicted &&
+                        'border-dashed border-bleeding/70 text-bleeding',
+                      flow === 'Spotting' &&
+                        'border-spotting/35 bg-spotting/20 font-medium text-spotting',
+                      flow === 'Bleeding' &&
+                        'bg-bleeding font-semibold text-accent-fg',
+                      isToday &&
+                        (flow === null && !predicted
+                          ? 'border-fg-0 font-semibold text-fg-0'
+                          : 'ring-1 ring-fg-0 ring-offset-1 ring-offset-bg-0 font-semibold'),
+                      isSelected &&
+                        (flow === null
+                          ? 'border-solid border-fg-0 bg-bg-1 font-semibold text-fg-0 shadow-control'
+                          : 'border-solid border-fg-0 shadow-control'),
                     )
-                  }
+                  }}
                 >
                   <span aria-hidden="true">{dayOfMonthLabel(date)}</span>
-                  {decoration?.(date)}
                 </CalendarCell>
               )
             }}

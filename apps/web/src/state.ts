@@ -5,7 +5,6 @@ import {
   type VaultSnapshot,
   VaultSnapshotSchema,
   applyLogsDiff,
-  applyPrediction,
   logsFromSnapshot,
   mergeSnapshots,
   sameSnapshot,
@@ -30,7 +29,6 @@ import {
 import { clearSyncCredentials, loadSyncCredentials } from './sync'
 
 const LOGS_STORAGE_KEY = 'cycle.logs'
-const PREDICTING_STORAGE_KEY = 'cycle.predicting'
 const VAULT_STORAGE_KEY = 'cycle.vault'
 
 export type SyncState =
@@ -45,7 +43,7 @@ export type SyncState =
 export type Tab = 'Calendar' | 'History' | 'About'
 export const tabs: ReadonlyArray<Tab> = ['Calendar', 'History', 'About']
 
-export type DialogName = 'about' | 'clear'
+export type DialogName = 'clear'
 
 /** The working copy behind the explicit edit mode. Nothing in `logs` changes
  *  until `SavedEditing`, so a stray tap inside the mode costs nothing. */
@@ -65,7 +63,6 @@ export type Model = {
   readonly today: PlainDate
   readonly acknowledgedLateOn: PlainDate | null
   readonly tab: Tab
-  readonly isPredicting: boolean
   readonly dialog: DialogName | null
   readonly draft: Draft | null
   readonly sync: SyncState
@@ -84,7 +81,6 @@ export type Action =
     }
   | { readonly type: 'EndedRange' }
   | { readonly type: 'AcknowledgedLate'; readonly date: PlainDate }
-  | { readonly type: 'SetPrediction'; readonly isPredicting: boolean }
   | { readonly type: 'SetTab'; readonly tab: Tab }
   | { readonly type: 'OpenedDialog'; readonly dialog: DialogName }
   | { readonly type: 'ClosedDialog' }
@@ -165,20 +161,6 @@ export const saveLogs = (logs: ReadonlyArray<DayLog>): void => {
   } catch {}
 }
 
-export const loadPredicting = (): boolean => {
-  try {
-    return localStorage.getItem(PREDICTING_STORAGE_KEY) !== 'false'
-  } catch {
-    return true
-  }
-}
-
-export const savePredicting = (isPredicting: boolean): void => {
-  try {
-    localStorage.setItem(PREDICTING_STORAGE_KEY, String(isPredicting))
-  } catch {}
-}
-
 export const loadVault = (): VaultSnapshot | null => {
   try {
     const raw = localStorage.getItem(VAULT_STORAGE_KEY)
@@ -204,12 +186,11 @@ export const saveVault = (vault: VaultSnapshot): void => {
 export const createModel = (
   today: PlainDate,
   logs: ReadonlyArray<DayLog>,
-  isPredicting = true,
   sync: SyncState = { status: 'off' },
   vault?: VaultSnapshot,
 ): Model => {
   const sorted = logsSorted(logs)
-  const initialVault = vault ?? snapshotFromLogs(sorted, isPredicting, 1)
+  const initialVault = vault ?? snapshotFromLogs(sorted, 1)
 
   return {
     logs: sorted,
@@ -217,7 +198,6 @@ export const createModel = (
     today,
     acknowledgedLateOn: null,
     tab: 'Calendar',
-    isPredicting,
     dialog: null,
     draft: null,
     sync,
@@ -236,14 +216,13 @@ export const initModel = (): Model => {
           error: null,
         }
   const logs = loadLogs()
-  const isPredicting = loadPredicting()
   const storedVault = loadVault()
   const vault =
     storedVault === null
-      ? snapshotFromLogs(logs, isPredicting, 1)
-      : applyPrediction(applyLogsDiff(storedVault, logs), isPredicting)
+      ? snapshotFromLogs(logs, 1)
+      : applyLogsDiff(storedVault, logs)
 
-  return createModel(todayPlainDate(), logs, isPredicting, sync, vault)
+  return createModel(todayPlainDate(), logs, sync, vault)
 }
 
 const upsertLog = (
@@ -405,13 +384,6 @@ export const reducer = (model: Model, action: Action): Model => {
     case 'AcknowledgedLate':
       return { ...model, acknowledgedLateOn: action.date }
 
-    case 'SetPrediction':
-      return {
-        ...model,
-        isPredicting: action.isPredicting,
-        vault: applyPrediction(model.vault, action.isPredicting),
-      }
-
     case 'SetTab':
       return { ...model, tab: action.tab }
 
@@ -437,8 +409,7 @@ export const reducer = (model: Model, action: Action): Model => {
       return {
         ...model,
         logs: [],
-        isPredicting: true,
-        vault: applyPrediction(applyLogsDiff(model.vault, []), true),
+        vault: applyLogsDiff(model.vault, []),
         dialog: null,
         draft: null,
       }
@@ -463,7 +434,6 @@ export const reducer = (model: Model, action: Action): Model => {
       return {
         ...model,
         logs: unchanged ? model.logs : logsFromSnapshot(merged),
-        isPredicting: unchanged ? model.isPredicting : merged.isPredicting,
         vault: unchanged ? model.vault : merged,
         sync: {
           status: 'ready',
@@ -485,7 +455,6 @@ export const reducer = (model: Model, action: Action): Model => {
       return {
         ...model,
         logs: unchanged ? model.logs : logsFromSnapshot(merged),
-        isPredicting: unchanged ? model.isPredicting : merged.isPredicting,
         vault: unchanged ? model.vault : merged,
         sync: {
           status: 'ready',
@@ -529,10 +498,6 @@ export const dispatchAtom = Atom.writable<void, Action>(
 
     if (next.logs !== current.logs) {
       saveLogs(next.logs)
-    }
-
-    if (next.isPredicting !== current.isPredicting) {
-      savePredicting(next.isPredicting)
     }
 
     if (next.vault !== current.vault) {

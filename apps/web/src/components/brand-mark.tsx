@@ -38,19 +38,9 @@ export const BrandMark = ({
 }) => (
   <svg
     aria-hidden="true"
-    viewBox="0 0 64 64"
+    viewBox="8 8 48 48"
     className={cn('size-6 shrink-0', className)}
   >
-    {mono ? null : (
-      <rect
-        width="64"
-        height="64"
-        rx="10"
-        className="fill-bg-1 stroke-line"
-        strokeWidth="1"
-        vectorEffect="non-scaling-stroke"
-      />
-    )}
     {DOTS.map(dot => (
       <circle
         key={`${dot.cx}-${dot.cy}`}

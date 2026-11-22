@@ -7,14 +7,14 @@ import {
 } from 'react'
 
 import {
-  CalculatorIcon,
-  CircleHelpIcon,
   CloudIcon,
   CloudOffIcon,
   DownloadIcon,
   EyeIcon,
   EyeOffIcon,
+  MoonIcon,
   RefreshCwIcon,
+  SunIcon,
   Trash2Icon,
   UploadIcon,
 } from 'lucide-react'
@@ -22,14 +22,7 @@ import {
 import { MIN_PASSPHRASE_LENGTH } from '@cycle/sync'
 
 import { BrandMark } from '../components/brand-mark'
-import {
-  Button,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-  Separator,
-  Switch,
-} from '../components/ui'
+import { Button, Separator } from '../components/ui'
 import type { Flow } from '../domain'
 import { plural } from '../format'
 import {
@@ -39,36 +32,20 @@ import {
   parseStoredLogs,
 } from '../state'
 import { enableSync, loadSyncCredentials, runSync } from '../sync'
+import { useTheme } from '../theme'
 import { FlowMark } from './today'
 
-const LegendRow = ({
+const LegendItem = ({
   flow,
   label,
 }: {
   readonly flow: Flow
   readonly label: string
 }) => (
-  <div className="grid grid-cols-[16px_1fr] items-center gap-snug">
-    <span className="flex justify-center">
-      <FlowMark flow={flow} />
-    </span>
+  <span className="inline-flex items-center gap-snug text-sm text-fg-1">
+    <FlowMark flow={flow} />
     <span>{label}</span>
-  </div>
-)
-
-const Legend = () => (
-  <Popover>
-    <PopoverTrigger variant="outline">
-      <CircleHelpIcon aria-hidden="true" data-icon="inline-start" />
-      What the marks mean
-    </PopoverTrigger>
-    <PopoverContent>
-      <div className="flex flex-col gap-snug">
-        <LegendRow flow="Bleeding" label="Bleeding" />
-        <LegendRow flow="Spotting" label="Spotting" />
-      </div>
-    </PopoverContent>
-  </Popover>
+  </span>
 )
 
 const INPUT_CLASS =
@@ -184,9 +161,12 @@ const SyncSection = ({
       onSubmit={event => void onSubmit(event)}
       className="flex flex-col items-start gap-snug"
     >
-      <div className="flex flex-wrap items-baseline gap-snug text-sm">
+      <div className="flex flex-col gap-tight text-sm">
         <span className="font-medium text-fg-0">Sync</span>
-        <span className="text-fg-1">Optional. End-to-end encrypted.</span>
+        <p className="text-fg-1">
+          Optional. Your username and passphrase encrypt your logs on this
+          device, and the server stores only ciphertext.
+        </p>
       </div>
       <div className="grid w-full grid-cols-1 gap-snug sm:grid-cols-2">
         <input
@@ -248,6 +228,7 @@ export const AboutView = ({
   readonly dispatch: Dispatch<Action>
 }) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const { theme, toggle } = useTheme()
 
   const onExport = () => {
     const blob = new Blob([formatStoredLogs(model.logs)], {
@@ -280,54 +261,40 @@ export const AboutView = ({
 
   return (
     <div className="flex flex-col gap-base">
-      <header className="flex items-center gap-snug">
-        <BrandMark className="size-8" />
-        <div>
-          <p className="font-semibold text-fg-0">Cycle</p>
-          <p className="text-sm text-fg-1">Private period tracking</p>
+      <header className="flex items-center justify-between gap-snug">
+        <div className="flex items-center gap-snug">
+          <BrandMark className="size-8" />
+          <div>
+            <p className="font-semibold text-fg-0">Cycle</p>
+            <p className="text-sm text-fg-1">Private period tracking</p>
+          </div>
         </div>
-      </header>
-
-      <div className="inline-flex items-center gap-snug">
-        <Switch
-          id="prediction"
-          isSelected={model.isPredicting}
-          onChange={isPredicting =>
-            dispatch({ type: 'SetPrediction', isPredicting })
-          }
-        />
-        <label
-          htmlFor="prediction"
-          data-slot="switch-label"
-          className="cursor-pointer"
-        >
-          Prediction
-        </label>
-        <span className="text-sm text-fg-1">
-          {model.isPredicting ? 'on' : 'off'}
-        </span>
-      </div>
-
-      <div className="flex flex-col gap-snug text-fg-1">
-        <p>
-          Everything stays on this device unless you turn on sync. No analytics.
-        </p>
-        <p>
-          Predictions are a <span className="text-fg-0">range</span>, not a
-          single date. Not for ovulation, fertility, or contraception.
-        </p>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-snug">
-        <Legend />
-
         <Button
           variant="outline"
-          onClick={() => dispatch({ type: 'OpenedDialog', dialog: 'about' })}
+          data-slot="theme-toggle"
+          aria-label={
+            theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'
+          }
+          onClick={toggle}
         >
-          <CalculatorIcon aria-hidden="true" data-icon="inline-start" />
-          How the range is calculated
+          {theme === 'dark' ? (
+            <MoonIcon aria-hidden="true" data-icon="inline-start" />
+          ) : (
+            <SunIcon aria-hidden="true" data-icon="inline-start" />
+          )}
+          {theme === 'dark' ? 'Dark' : 'Light'}
         </Button>
+      </header>
+
+      <div className="flex flex-col gap-snug text-sm text-fg-1">
+        <p>
+          Cycle is a local period tracker. Your logs stay on this device unless
+          you turn on sync, with no account and no analytics.
+        </p>
+        <p>
+          Hold any day on the calendar to start editing, then tap or drag across
+          days to log bleeding or spotting and tap Save.
+        </p>
       </div>
 
       <Separator />
@@ -369,6 +336,40 @@ export const AboutView = ({
           </Button>
         </div>
       </div>
+
+      <Separator />
+
+      <section className="flex flex-col gap-base">
+        <div className="flex flex-col gap-snug">
+          <h2 className="text-sm font-medium text-fg-0">Marks</h2>
+          <div className="flex flex-wrap items-center gap-x-base gap-y-snug">
+            <LegendItem flow="Bleeding" label="Bleeding" />
+            <LegendItem flow="Spotting" label="Spotting" />
+            <span className="inline-flex items-center gap-snug text-sm text-fg-1">
+              <span
+                aria-hidden="true"
+                className="size-3 rounded-xs border border-dashed border-bleeding/70"
+              />
+              <span>Predicted</span>
+            </span>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-snug text-sm text-fg-1">
+          <h2 className="text-sm font-medium text-fg-0">
+            How the range is calculated
+          </h2>
+          <p>
+            Cycle predicts your next period as a date window using the median
+            and spread of your last six cycles, rounded outward to whole days.
+          </p>
+          <p>
+            Each late day shifts the window forward by less than a day. Once you
+            pass the window, predictions pause until you log a new period.
+          </p>
+          <p>Do not use these dates for fertility or contraception.</p>
+        </div>
+      </section>
     </div>
   )
 }

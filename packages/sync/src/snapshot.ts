@@ -18,16 +18,12 @@ export type VaultEntry = Schema.Schema.Type<typeof VaultEntrySchema>
 
 export const VaultSnapshotSchema = Schema.Struct({
   entries: Schema.Array(VaultEntrySchema),
-  isPredicting: Schema.Boolean,
-  isPredictingUpdatedAt: Schema.Number,
 })
 
 export type VaultSnapshot = Schema.Schema.Type<typeof VaultSnapshotSchema>
 
-export const emptySnapshot = (isPredicting = true): VaultSnapshot => ({
+export const emptySnapshot = (): VaultSnapshot => ({
   entries: [],
-  isPredicting,
-  isPredictingUpdatedAt: 0,
 })
 
 const sortEntries = (
@@ -36,7 +32,7 @@ const sortEntries = (
   [...entries].sort((a, b) => a.date.localeCompare(b.date))
 
 export const maxUpdatedAt = (snapshot: VaultSnapshot): number => {
-  let max = snapshot.isPredictingUpdatedAt
+  let max = 0
 
   for (const entry of snapshot.entries) {
     if (entry.updatedAt > max) {
@@ -54,7 +50,6 @@ export const nextTimestamp = (
 
 export const snapshotFromLogs = (
   logs: ReadonlyArray<DayLog>,
-  isPredicting: boolean,
   updatedAt = 1,
 ): VaultSnapshot => ({
   entries: sortEntries(
@@ -64,8 +59,6 @@ export const snapshotFromLogs = (
       updatedAt,
     })),
   ),
-  isPredicting,
-  isPredictingUpdatedAt: updatedAt,
 })
 
 export const logsFromSnapshot = (
@@ -124,19 +117,6 @@ export const applyLogsDiff = (
   return changed ? { ...base, entries: sortEntries([...map.values()]) } : base
 }
 
-export const applyPrediction = (
-  base: VaultSnapshot,
-  isPredicting: boolean,
-  now = Date.now(),
-): VaultSnapshot =>
-  base.isPredicting === isPredicting
-    ? base
-    : {
-        ...base,
-        isPredicting,
-        isPredictingUpdatedAt: nextTimestamp(base, now),
-      }
-
 const flowRank = (flow: VaultEntry['flow']): number => {
   switch (flow) {
     case null:
@@ -172,28 +152,14 @@ export const mergeSnapshots = (
     map.set(entry.date, existing === undefined ? entry : pickEntry(existing, entry))
   }
 
-  const preferLocalPrediction =
-    local.isPredictingUpdatedAt > remote.isPredictingUpdatedAt ||
-    (local.isPredictingUpdatedAt === remote.isPredictingUpdatedAt &&
-      (local.isPredicting || !remote.isPredicting))
-
   const merged: VaultSnapshot = {
     entries: sortEntries([...map.values()]),
-    isPredicting: preferLocalPrediction
-      ? local.isPredicting
-      : remote.isPredicting,
-    isPredictingUpdatedAt: Math.max(
-      local.isPredictingUpdatedAt,
-      remote.isPredictingUpdatedAt,
-    ),
   }
 
   return sameSnapshot(merged, local) ? local : merged
 }
 
 export const sameSnapshot = (a: VaultSnapshot, b: VaultSnapshot): boolean =>
-  a.isPredicting === b.isPredicting &&
-  a.isPredictingUpdatedAt === b.isPredictingUpdatedAt &&
   a.entries.length === b.entries.length &&
   a.entries.every((entry, index) => {
     const other = b.entries[index]

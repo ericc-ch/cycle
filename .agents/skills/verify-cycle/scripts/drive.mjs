@@ -367,7 +367,7 @@ const flows = {
       flow,
       'a level from the old build still draws as bleeding',
       (await browser.evaluate(
-        `document.querySelector('[data-slot="calendar-day"][data-today] span.bg-bleeding') !== null`,
+        `document.querySelector('[data-slot="calendar-day"][data-today][data-flow="Bleeding"]') !== null`,
       )) === true,
     )
   },
@@ -390,9 +390,9 @@ const flows = {
 
     await browser.click('[data-slot="tabs-trigger"]', 'About')
     await browser.waitFor(
-      `document.querySelector('[data-slot="switch"]') !== null`,
+      `document.body.innerText.includes('How the range is calculated')`,
       {
-        label: 'About panel switch',
+        label: 'About panel',
       },
     )
     must(
@@ -402,19 +402,10 @@ const flows = {
     )
     must(
       flow,
-      'About shows the prediction switch on',
+      'About does not render a prediction switch',
       (await browser.evaluate(
-        `document.querySelector('[data-slot="switch"]')?.dataset.selected`,
-      )) === 'true',
-    )
-
-    await browser.click('[data-slot="switch"]')
-    must(
-      flow,
-      'the switch turns prediction off',
-      (await browser.evaluate(
-        `document.querySelector('[data-slot="switch"]')?.dataset.selected`,
-      )) === undefined,
+        `document.querySelector('[data-slot="switch"]') === null`,
+      )) === true,
     )
     await browser.screenshot(join(outDir, 'tabs-about.png'))
 
@@ -422,35 +413,6 @@ const flows = {
     await browser.waitFor(
       `document.querySelector('[data-slot="calendar-day"]') !== null`,
       { label: 'Calendar panel' },
-    )
-    must(
-      flow,
-      'Calendar shows that prediction is off',
-      (await browser.evaluate(
-        `document.querySelector('[role="status"]')?.innerText.includes('Prediction is off.')`,
-      )) === true,
-    )
-
-    await browser.goto(URL)
-    await browser.click('[data-slot="tabs-trigger"]', 'Calendar')
-    await browser.waitFor(
-      `document.querySelector('[role="status"]') !== null`,
-      { label: 'Calendar status after reload' },
-    )
-    must(
-      flow,
-      'prediction stays off on Calendar after reload',
-      (await browser.evaluate(
-        `document.querySelector('[role="status"]')?.innerText.includes('Prediction is off.')`,
-      )) === true,
-    )
-    await browser.click('[data-slot="tabs-trigger"]', 'About')
-    must(
-      flow,
-      'prediction switch stays off on reload',
-      (await browser.evaluate(
-        `document.querySelector('[data-slot="switch"]')?.dataset.selected`,
-      )) === undefined,
     )
 
     // A gap well over her usual is labelled in History instead of being
@@ -490,43 +452,22 @@ const flows = {
 
     await browser.click('[data-slot="tabs-trigger"]', 'About')
     await browser.waitFor(
-      `document.body.innerText.includes('Everything stays on this device')`,
+      `document.body.innerText.includes('Cycle is a local period tracker')`,
       { label: 'About panel' },
     )
 
-    await browser.click('[data-slot="button"]', 'How the range is calculated')
-    await browser.waitFor(
-      `document.querySelector('[data-slot="dialog-content"]') !== null`,
-      {
-        label: 'explainer dialog to open',
-      },
-    )
-    const title = await browser.evaluate(
-      `document.querySelector('[data-slot="dialog-content"] [data-slot="dialog-title"]')?.textContent ?? null`,
+    const aboutText = await browser.evaluate(`document.body.innerText`)
+    must(
+      flow,
+      'About shows the marks legend inline',
+      aboutText.includes('Bleeding') &&
+        aboutText.includes('Spotting') &&
+        aboutText.includes('Predicted'),
     )
     must(
       flow,
-      'the explainer dialog names itself',
-      title === 'How the range is calculated',
-      String(title),
-    )
-    await browser.screenshot(join(outDir, 'overlays-dialog.png'))
-
-    await browser.escape()
-    await browser.waitFor(
-      `document.querySelector('[data-slot="dialog-content"]') === null`,
-      {
-        label: 'Escape to close the dialog',
-      },
-    )
-    must(flow, 'Escape closes the dialog', !(await dialogOpen(browser)))
-
-    const tab = await browser.box('[data-slot="tabs-trigger"]', 'Calendar')
-    must(
-      flow,
-      'the closed dialog leaves the page clickable',
-      !tab.covered,
-      tab.hit ?? '',
+      'About explains how the range is calculated inline',
+      aboutText.includes('How the range is calculated'),
     )
 
     await browser.click('[data-slot="button"]', 'Clear all data')
@@ -552,6 +493,7 @@ const flows = {
         `document.querySelector('[role="alertdialog"]') !== null`,
       )) === true,
     )
+    await browser.screenshot(join(outDir, 'overlays-dialog.png'))
     await browser.escape()
     await browser.waitFor(
       `document.querySelector('[data-slot="alert-dialog-content"]') === null`,
@@ -560,39 +502,13 @@ const flows = {
       },
     )
 
-    await browser.click('[data-slot="popover-trigger"]')
-    await browser.waitFor(
-      `document.querySelector('[data-slot="popover-content"]') !== null`,
-      { label: 'legend popover', timeout: 3000 },
-    )
-    const legendText = await browser.evaluate(
-      `document.querySelector('[data-slot="popover-content"]')?.innerText ?? ''`,
-    )
+    const tab = await browser.box('[data-slot="tabs-trigger"]', 'Calendar')
     must(
       flow,
-      'the legend names both marks',
-      legendText.toLowerCase().includes('bleeding') &&
-        legendText.toLowerCase().includes('spotting'),
-      legendText.replace(/\n/g, ' / '),
+      'the closed dialog leaves the page clickable',
+      !tab.covered,
+      tab.hit ?? '',
     )
-    await browser.screenshot(join(outDir, 'overlays-popover.png'))
-
-    await browser.escape()
-    let closed = false
-    try {
-      await browser.waitFor(
-        `document.querySelector('[data-slot="popover-content"]') === null`,
-        { label: 'Escape to close the popover', timeout: 1500 },
-      )
-      closed = true
-    } catch {
-      await browser.click('[data-slot="popover-trigger"]')
-      closed =
-        (await browser.evaluate(
-          `document.querySelector('[data-slot="popover-content"]') === null`,
-        )) === true
-    }
-    must(flow, 'the legend closes again', closed)
 
     await browser.screenshot(join(outDir, 'overlays-final.png'))
   },
@@ -990,7 +906,7 @@ const flows = {
       })
       await browserB.click('[data-slot="tabs-trigger"]', 'Calendar')
       await browserB.waitFor(
-        `document.querySelector('[data-slot="calendar-day"][data-date="${todayKey}"] span.bg-bleeding') !== null`,
+        `document.querySelector('[data-slot="calendar-day"][data-date="${todayKey}"][data-flow="Bleeding"]') !== null`,
         { label: 'device B shows device A bleeding mark' },
       )
       must(flow, 'device B receives device A bleeding day', true)

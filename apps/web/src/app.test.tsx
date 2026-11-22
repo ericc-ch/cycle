@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from 'vitest'
 
 import { RegistryProvider } from '@effect/atom-react'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 import { snapshotFromLogs } from '@cycle/sync'
@@ -457,28 +457,17 @@ describe('view', () => {
     ).toBeTruthy()
   })
 
-  test('the explainer dialog opens and Escape closes it', async () => {
+  test('About explains the marks and range inline', async () => {
     const user = userEvent.setup()
     renderApp(baseModel)
 
     await user.click(screen.getByRole('tab', { name: 'About' }))
-    await user.click(
-      screen.getByRole('button', { name: 'How the range is calculated' }),
-    )
-
-    const dialog = await screen.findByRole('dialog')
 
     expect(
-      within(dialog).getByRole('heading', {
-        name: 'How the range is calculated',
-      }),
+      screen.getByRole('heading', { name: 'How the range is calculated' }),
     ).toBeTruthy()
-
-    await user.keyboard('{Escape}')
-
-    await waitFor(() => {
-      expect(screen.queryByRole('dialog')).toBeNull()
-    })
+    expect(screen.getByRole('heading', { name: 'Marks' })).toBeTruthy()
+    expect(screen.getByText('Predicted')).toBeTruthy()
   })
 
   test('the clear dialog deletes every day', async () => {
@@ -496,27 +485,6 @@ describe('view', () => {
     await user.click(screen.getByRole('tab', { name: 'Calendar' }))
 
     expect(localStorage.getItem('cycle.logs')).toBe('[]')
-  })
-
-  test('the prediction switch turns prediction off', async () => {
-    const user = userEvent.setup()
-    renderApp(baseModel)
-
-    await user.click(screen.getByRole('tab', { name: 'About' }))
-
-    const prediction = document.querySelector('[data-slot="switch"]')
-
-    expect(prediction?.getAttribute('data-selected')).toBe('true')
-    expect(screen.getByText('on')).toBeTruthy()
-
-    if (prediction === null) {
-      throw new Error('No switch rendered')
-    }
-
-    await user.click(prediction)
-
-    expect(prediction.getAttribute('data-selected')).toBeNull()
-    expect(screen.getByText('off')).toBeTruthy()
   })
 })
 
@@ -568,7 +536,6 @@ describe('sync reducer invariants', () => {
     })
     const remote = snapshotFromLogs(
       [...twoPeriods, { date: date('2026-10-15'), flow: 'Spotting' }],
-      true,
       500,
     )
     const syncedMidEdit = reducer(painted, {

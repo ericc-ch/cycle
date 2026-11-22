@@ -73,6 +73,14 @@
 @layer base {
   :root {
     color-scheme: light dark;
+
+    &:has(> head > meta[name='color-scheme'][content='dark']) {
+      color-scheme: dark;
+    }
+
+    &:has(> head > meta[name='color-scheme'][content='light']) {
+      color-scheme: light;
+    }
   }
 
   html {
@@ -101,4 +109,11 @@
     margin: 0;
     text-wrap: pretty;
   }
+}
+
+:root[data-theme-switching],
+:root[data-theme-switching] *,
+:root[data-theme-switching] *::before,
+:root[data-theme-switching] *::after {
+  transition: none !important;
 }

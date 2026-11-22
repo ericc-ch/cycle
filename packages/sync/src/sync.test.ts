@@ -6,7 +6,6 @@ import { parsePlainDate } from '@cycle/domain'
 import {
   PutVaultRequestSchema,
   applyLogsDiff,
-  applyPrediction,
   decryptSnapshot,
   deriveCredentials,
   emptySnapshot,
@@ -36,7 +35,6 @@ describe('snapshot LWW merge', () => {
         { date: date('2026-11-10'), flow: 'Bleeding' },
         { date: date('2026-11-11'), flow: 'Bleeding' },
       ],
-      true,
       100,
     )
 
@@ -68,7 +66,6 @@ describe('snapshot LWW merge', () => {
   test('monotonic timestamp beats a skewed local clock', () => {
     const remote = snapshotFromLogs(
       [{ date: date('2026-11-10'), flow: 'Bleeding' }],
-      true,
       50_000,
     )
 
@@ -77,14 +74,6 @@ describe('snapshot LWW merge', () => {
     const cleared = applyLogsDiff(remote, [], 1000)
 
     expect(logsFromSnapshot(mergeSnapshots(remote, cleared))).toEqual([])
-  })
-
-  test('merges prediction flag by timestamp', () => {
-    const a = applyPrediction(emptySnapshot(true), false, 200)
-    const b = applyPrediction(emptySnapshot(true), true, 100)
-
-    expect(mergeSnapshots(a, b).isPredicting).toBe(false)
-    expect(mergeSnapshots(b, a).isPredicting).toBe(false)
   })
 })
 
@@ -116,7 +105,6 @@ describe('crypto', () => {
 
     const snapshot = snapshotFromLogs(
       [{ date: date('2026-11-12'), flow: 'Spotting' }],
-      true,
       10,
     )
     const ciphertext = await Effect.runPromise(encryptSnapshot(creds, snapshot))
@@ -244,7 +232,6 @@ describe('syncVault', () => {
 
     const initial = snapshotFromLogs(
       [{ date: date('2026-11-10'), flow: 'Bleeding' }],
-      true,
       100,
     )
 
@@ -282,7 +269,7 @@ describe('syncVault', () => {
         syncVault({
           baseUrl: 'https://cycle.ericc.ch',
           credentials: wrongCreds,
-          local: emptySnapshot(true),
+          local: emptySnapshot(),
           fetchFn: fakeFetch,
         }),
       ),

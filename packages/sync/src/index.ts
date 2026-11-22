@@ -34,7 +34,6 @@ export {
   type VaultSnapshot,
   VaultSnapshotSchema,
   applyLogsDiff,
-  applyPrediction,
   emptySnapshot,
   logsFromSnapshot,
   maxUpdatedAt,

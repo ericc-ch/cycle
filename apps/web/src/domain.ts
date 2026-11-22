@@ -33,6 +33,7 @@ export {
   monthYearLabel,
   parsePlainDate,
   periodsFrom,
+  predictedWindows,
   presentGaps,
   sameDay,
   stateFor,

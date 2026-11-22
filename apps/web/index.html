@@ -7,6 +7,14 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
     <meta name="color-scheme" content="light dark" />
+    <script>
+      try {
+        var t = localStorage.getItem('cycle.theme')
+        if (t === 'light' || t === 'dark') {
+          document.querySelector('meta[name="color-scheme"]').content = t
+        }
+      } catch {}
+    </script>
     <meta
       name="theme-color"
       media="(prefers-color-scheme: light)"

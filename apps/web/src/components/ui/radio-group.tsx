@@ -36,7 +36,7 @@ const RadioGroupItem = ({ className, ...props }: RadioGroupItemProps) => (
     data-slot="radio-group-item"
     className={({ isSelected }) =>
       cn(
-        'inline-flex min-h-11 flex-1 basis-0 cursor-pointer items-center justify-center gap-tight rounded-sm border border-transparent bg-transparent px-snug text-base font-medium text-fg-1 transition-colors outline-none hover:text-fg-0 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring',
+        'inline-flex min-h-11 flex-1 basis-0 cursor-pointer items-center justify-center gap-snug rounded-sm border border-transparent bg-transparent px-snug text-base font-medium text-fg-1 [text-box:trim-both_cap_alphabetic] transition-colors outline-none hover:text-fg-0 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring',
         isSelected &&
           'border-line bg-bg-1 font-semibold text-fg-0 shadow-control',
         className,

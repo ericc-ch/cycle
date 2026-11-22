@@ -381,6 +381,52 @@ export const stateFor = (
   return Option.getOrElse(maybeState, () => CycleState.NoCycles())
 }
 
+export const predictedWindows = (
+  periods: ReadonlyArray<Period>,
+  today: PlainDate,
+  count = 12,
+  options: PredictorOptions = defaultPredictorOptions,
+): ReadonlyArray<Window> => {
+  if (count <= 0) {
+    return []
+  }
+
+  return Option.getOrElse(
+    Option.flatMap(latestPeriod(periods), period => {
+      const lengths = cycleLengths(periods)
+      const elapsed = Math.max(1, dayNumber(today) - dayNumber(period.start))
+
+      return Option.map(forecast(lengths, elapsed, options), forecasted => {
+        const usualHighDay = Math.ceil(
+          forecasted.centreDays + options.bandZ * forecasted.spreadDays,
+        )
+
+        if (elapsed > usualHighDay) {
+          return []
+        }
+
+        const first = windowFromForecast(forecasted, dayNumber(period.start))
+        const firstLikelyDay = dayNumber(first.mostLikely)
+        const halfWidth = options.bandZ * forecasted.spreadDays
+        const windows: Window[] = [first]
+
+        for (let index = 1; index < count; index++) {
+          const centre = firstLikelyDay + index * forecasted.centreDays
+
+          windows.push({
+            low: dateFromDayNumber(Math.floor(centre - halfWidth)),
+            high: dateFromDayNumber(Math.ceil(centre + halfWidth)),
+            mostLikely: dateFromDayNumber(Math.round(centre)),
+          })
+        }
+
+        return windows
+      })
+    }),
+    () => [],
+  )
+}
+
 export const cycleDayFor = (
   periods: ReadonlyArray<Period>,
   today: PlainDate,
