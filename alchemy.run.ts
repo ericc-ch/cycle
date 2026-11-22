@@ -2,9 +2,9 @@ import * as Cloudflare from '@alchemy.run/cloudflare'
 import * as Alchemy from 'alchemy'
 import { adopt } from 'alchemy/AdoptPolicy'
 import { Stack } from 'alchemy/Stack'
+import * as Config from 'effect/Config'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
-import * as Redacted from 'effect/Redacted'
 
 const ZONE = 'ericc.ch'
 
@@ -28,12 +28,23 @@ export default Alchemy.Stack(
       simple: { limit: 60, period: 60 },
     })
 
+    const vapidPublicKey = yield* Config.option(
+      Config.String('VAPID_PUBLIC_KEY'),
+    )
+    const vapidPrivateKey = yield* Config.option(
+      Config.Redacted('VAPID_PRIVATE_KEY'),
+    )
+    const vapidSubject = yield* Config.option(Config.String('VAPID_SUBJECT'))
+
     const vapidEnv =
-      process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY
+      Option.isSome(vapidPublicKey) && Option.isSome(vapidPrivateKey)
         ? {
-            VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY,
-            VAPID_PRIVATE_KEY: Redacted.make(process.env.VAPID_PRIVATE_KEY),
-            VAPID_SUBJECT: process.env.VAPID_SUBJECT ?? `https://cycle.${ZONE}`,
+            VAPID_PUBLIC_KEY: vapidPublicKey.value,
+            VAPID_PRIVATE_KEY: vapidPrivateKey.value,
+            VAPID_SUBJECT: Option.getOrElse(
+              vapidSubject,
+              () => `https://cycle.${ZONE}`,
+            ),
           }
         : {}
 
