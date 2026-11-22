@@ -19,13 +19,9 @@ import {
   useLocation,
   useNavigate,
 } from '@tanstack/react-router'
-import {
-  CalendarDaysIcon,
-  HistoryIcon,
-  InfoIcon,
-  Trash2Icon,
-} from 'lucide-react'
+import { HistoryIcon, InfoIcon, Trash2Icon } from 'lucide-react'
 
+import { BrandMark } from './components/brand-mark'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -70,7 +66,7 @@ const isTab = (value: string): value is Tab =>
 const tabIcon = (tab: Tab) => {
   switch (tab) {
     case 'Calendar':
-      return <CalendarDaysIcon aria-hidden="true" />
+      return <BrandMark className="size-5" />
     case 'History':
       return <HistoryIcon aria-hidden="true" />
     case 'About':

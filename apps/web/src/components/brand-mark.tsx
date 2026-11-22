@@ -31,6 +31,14 @@ export const BrandMark = ({
     viewBox="0 0 64 64"
     className={cn('size-6 shrink-0', className)}
   >
+    <rect
+      width="64"
+      height="64"
+      rx="10"
+      className="fill-bg-1 stroke-line"
+      strokeWidth="1"
+      vectorEffect="non-scaling-stroke"
+    />
     {DOTS.map(dot => (
       <circle
         key={`${dot.cx}-${dot.cy}`}

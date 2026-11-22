@@ -11,7 +11,7 @@
       .spotting { fill: #d495c4; }
     }
   </style>
-  <rect class="tile" width="64" height="64" rx="14" />
+  <rect class="tile" width="64" height="64" rx="10" />
   <circle class="muted" cx="18" cy="18" r="4.5" />
   <circle class="muted" cx="32" cy="18" r="4.5" />
   <circle class="muted" cx="46" cy="18" r="4.5" />
