@@ -7,6 +7,8 @@ import {
 } from 'react'
 
 import {
+  BellIcon,
+  BellOffIcon,
   CloudIcon,
   CloudOffIcon,
   DownloadIcon,
@@ -23,8 +25,15 @@ import { MIN_PASSPHRASE_LENGTH } from '@cycle/sync'
 
 import { BrandMark } from '../components/brand-mark'
 import { Button, Separator } from '../components/ui'
-import type { Flow } from '../domain'
+import { type Flow, type Period, monthDayLabel } from '../domain'
 import { plural } from '../format'
+import {
+  computeNextReminder,
+  disableReminders,
+  enableReminders,
+  getReminderSupport,
+  loadStoredReminder,
+} from '../reminders'
 import {
   type Action,
   type Model,
@@ -220,11 +229,115 @@ const SyncSection = ({
   )
 }
 
+const RemindersSection = ({
+  model,
+  periods,
+}: {
+  readonly model: Model
+  readonly periods: ReadonlyArray<Period>
+}) => {
+  const [enabled, setEnabled] = useState(() => loadStoredReminder() !== null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const support = getReminderSupport()
+  const nextReminder = computeNextReminder(periods, model.today)
+
+  const onEnable = async () => {
+    if (busy) {
+      return
+    }
+
+    setBusy(true)
+    setError(null)
+    const outcome = await enableReminders(nextReminder?.at ?? null)
+    setBusy(false)
+
+    if (!outcome.ok) {
+      setError(outcome.message)
+      return
+    }
+
+    setEnabled(true)
+  }
+
+  const onDisable = async () => {
+    if (busy) {
+      return
+    }
+
+    setBusy(true)
+    setError(null)
+    await disableReminders()
+    setBusy(false)
+    setEnabled(false)
+  }
+
+  return (
+    <div className="flex flex-col items-start gap-snug">
+      <div className="flex flex-col gap-tight text-sm">
+        <span className="font-medium text-fg-0">Reminders</span>
+        <p className="text-fg-1">
+          Get a notification two days before your predicted window starts. Set
+          per device, and the server only stores your next reminder time.
+        </p>
+      </div>
+
+      {support === 'ios-install-required' ? (
+        <p className="text-sm text-fg-1">
+          Add Cycle to your Home Screen first to turn on notifications on iOS.
+        </p>
+      ) : support === 'unsupported' ? (
+        <p className="text-sm text-fg-1">
+          Notifications are not supported in this browser.
+        </p>
+      ) : support === 'denied' ? (
+        <p className="text-sm text-fg-1">
+          Notifications are blocked in your browser settings.
+        </p>
+      ) : enabled ? (
+        <>
+          <p className="text-sm text-fg-1">
+            {nextReminder === null
+              ? 'Log at least two periods to schedule a reminder.'
+              : `Next reminder: ${monthDayLabel(nextReminder.date)} at 09:00.`}
+          </p>
+          <Button
+            variant="ghost"
+            disabled={busy}
+            onClick={() => void onDisable()}
+          >
+            <BellOffIcon aria-hidden="true" data-icon="inline-start" />
+            {busy ? 'Turning off…' : 'Turn off reminders'}
+          </Button>
+        </>
+      ) : (
+        <>
+          {error === null ? null : (
+            <p role="alert" className="text-sm text-danger">
+              {error}
+            </p>
+          )}
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={() => void onEnable()}
+          >
+            <BellIcon aria-hidden="true" data-icon="inline-start" />
+            {busy ? 'Turning on…' : 'Turn on reminders'}
+          </Button>
+        </>
+      )}
+    </div>
+  )
+}
+
 export const AboutView = ({
   model,
+  periods,
   dispatch,
 }: {
   readonly model: Model
+  readonly periods: ReadonlyArray<Period>
   readonly dispatch: Dispatch<Action>
 }) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -300,6 +413,10 @@ export const AboutView = ({
       <Separator />
 
       <SyncSection model={model} dispatch={dispatch} />
+
+      <Separator />
+
+      <RemindersSection model={model} periods={periods} />
 
       <Separator />
 

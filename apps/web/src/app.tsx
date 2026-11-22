@@ -38,6 +38,7 @@ import {
 } from './components/ui'
 import { type Period, todayPlainDate } from './domain'
 import { plural } from './format'
+import { computeNextReminder, syncReminderSchedule } from './reminders'
 import {
   type Action,
   type DialogName,
@@ -114,9 +115,9 @@ const HistoryRoute = () => {
 }
 
 const AboutRoute = () => {
-  const { model, dispatch } = useAppState()
+  const { model, periods, dispatch } = useAppState()
 
-  return <AboutView model={model} dispatch={dispatch} />
+  return <AboutView model={model} periods={periods} dispatch={dispatch} />
 }
 
 const RootRoute = () => {
@@ -264,6 +265,19 @@ const RootRoute = () => {
     }
   }, [syncEnabled, isEditing, model.vault, triggerSync])
 
+  const lastSyncedReminderAtRef = useRef<number | null | undefined>(undefined)
+
+  useEffect(() => {
+    const nextAt = computeNextReminder(periods, model.today)?.at ?? null
+
+    if (lastSyncedReminderAtRef.current === nextAt) {
+      return
+    }
+
+    lastSyncedReminderAtRef.current = nextAt
+    void syncReminderSchedule(nextAt)
+  }, [periods, model.today])
+
   const onTabChange = (key: Key) => {
     const tab = String(key)
 
@@ -382,7 +396,11 @@ export const AppShell = ({
                   <HistoryView logs={model.logs} periods={periods} />
                 </TabsContent>
                 <TabsContent id="About">
-                  <AboutView model={model} dispatch={dispatch} />
+                  <AboutView
+                    model={model}
+                    periods={periods}
+                    dispatch={dispatch}
+                  />
                 </TabsContent>
               </>
             )}

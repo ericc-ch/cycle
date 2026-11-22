@@ -1,4 +1,5 @@
 import { Effect } from 'effect'
+import { Base64Url } from 'effect/encoding'
 import { describe, expect, test } from 'vitest'
 
 import {
@@ -8,10 +9,12 @@ import {
   syncVault,
 } from '@cycle/sync'
 
+import { isAllowedPushEndpoint } from './push'
 import {
   type ApiEnv,
   type D1DatabaseLike,
   type D1PreparedStatementLike,
+  type PushSubscriptionRow,
   createSyncWorker,
 } from './worker'
 
@@ -23,8 +26,17 @@ type Row = {
   updated_at: number
 }
 
+type StoredPushRow = {
+  device_id: string
+  endpoint: string
+  notify_at: number | null
+  sent_for: number | null
+  updated_at: number
+}
+
 const makeFakeD1 = (): D1DatabaseLike => {
   const rows = new Map<string, Row>()
+  const pushRows = new Map<string, StoredPushRow>()
 
   const makeStatement = (
     query: string,
@@ -32,12 +44,37 @@ const makeFakeD1 = (): D1DatabaseLike => {
   ): D1PreparedStatementLike => ({
     bind: (...values) => makeStatement(query, values),
     first: async () => {
-      if (query.startsWith('SELECT')) {
+      if (query.startsWith('SELECT') && query.includes('FROM vaults')) {
         const vaultId = String(params[0])
         return rows.get(vaultId) ?? null
       }
 
       return null
+    },
+    all: async () => {
+      if (query.includes('FROM push_subscriptions')) {
+        const currentMs = Number(params[0])
+        const results: PushSubscriptionRow[] = []
+
+        for (const row of pushRows.values()) {
+          if (
+            row.notify_at !== null &&
+            row.notify_at <= currentMs &&
+            (row.sent_for === null || row.sent_for !== row.notify_at)
+          ) {
+            results.push({
+              device_id: row.device_id,
+              endpoint: row.endpoint,
+              notify_at: row.notify_at,
+              sent_for: row.sent_for,
+            })
+          }
+        }
+
+        return { results }
+      }
+
+      return { results: [] }
     },
     run: async () => {
       if (query.startsWith('INSERT INTO vaults')) {
@@ -87,12 +124,75 @@ const makeFakeD1 = (): D1DatabaseLike => {
         return { meta: { changes: 1 } }
       }
 
+      if (query.startsWith('INSERT INTO push_subscriptions')) {
+        const device_id = String(params[0])
+        const endpoint = String(params[1])
+        const notify_at = params[2] === null ? null : Number(params[2])
+        const updated_at = Number(params[3])
+        const existing = pushRows.get(device_id)
+
+        pushRows.set(device_id, {
+          device_id,
+          endpoint,
+          notify_at,
+          sent_for: existing?.sent_for ?? null,
+          updated_at,
+        })
+
+        return { meta: { changes: 1 } }
+      }
+
+      if (query.startsWith('UPDATE push_subscriptions')) {
+        const sent_for = Number(params[0])
+        const updated_at = Number(params[1])
+        const device_id = String(params[2])
+        const expectedNotifyAt = Number(params[3])
+        const existing = pushRows.get(device_id)
+
+        if (existing === undefined || existing.notify_at !== expectedNotifyAt) {
+          return { meta: { changes: 0 } }
+        }
+
+        pushRows.set(device_id, {
+          ...existing,
+          sent_for,
+          notify_at: null,
+          updated_at,
+        })
+
+        return { meta: { changes: 1 } }
+      }
+
+      if (query.startsWith('DELETE FROM push_subscriptions')) {
+        const device_id = String(params[0])
+        const existed = pushRows.delete(device_id)
+
+        return { meta: { changes: existed ? 1 : 0 } }
+      }
+
       return { meta: { changes: 0 } }
     },
   })
 
   return {
     prepare: query => makeStatement(query),
+  }
+}
+
+const makeTestVapidKeys = async () => {
+  const pair = await crypto.subtle.generateKey(
+    { name: 'ECDSA', namedCurve: 'P-256' },
+    true,
+    ['sign', 'verify'],
+  )
+  const jwk = await crypto.subtle.exportKey('jwk', pair.privateKey)
+  const rawPub = new Uint8Array(
+    await crypto.subtle.exportKey('raw', pair.publicKey),
+  )
+
+  return {
+    publicKey: Base64Url.encode(rawPub),
+    privateKey: jwk.d ?? '',
   }
 }
 
@@ -191,5 +291,142 @@ describe('sync worker', () => {
       env,
     )
     expect(tooBig.status).toBe(413)
+  })
+})
+
+describe('push reminders worker', () => {
+  test('validates push endpoint allowlist against SSRF', () => {
+    expect(
+      isAllowedPushEndpoint('https://web.push.apple.com/Q3x9-test'),
+    ).toBe(true)
+    expect(
+      isAllowedPushEndpoint('https://fcm.googleapis.com/fcm/send/abc123'),
+    ).toBe(true)
+    expect(
+      isAllowedPushEndpoint(
+        'https://updates.push.services.mozilla.com/wpush/v2/abc',
+      ),
+    ).toBe(true)
+    expect(isAllowedPushEndpoint('http://fcm.googleapis.com/fcm/send/a')).toBe(
+      false,
+    )
+    expect(
+      isAllowedPushEndpoint('https://fcm.googleapis.com:8443/fcm/send/a'),
+    ).toBe(false)
+    expect(isAllowedPushEndpoint('https://169.254.169.254/latest')).toBe(false)
+    expect(isAllowedPushEndpoint('https://evil.example.com/push')).toBe(false)
+  })
+
+  test('subscribes, rejects invalid endpoints, sends due pushes, and cleans up 410', async () => {
+    const vapid = await makeTestVapidKeys()
+    let nowMs = 1_700_000_000_000
+    const deliveries: Array<{ readonly url: string; readonly auth: string }> = []
+    let nextPushStatus = 201
+
+    const fakePushFetch: typeof fetch = async (input, init) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      const auth = new Headers(init?.headers).get('authorization') ?? ''
+      deliveries.push({ url, auth })
+
+      return new Response(null, { status: nextPushStatus })
+    }
+
+    const worker = createSyncWorker(() => nowMs, fakePushFetch)
+    const env: ApiEnv = {
+      DB: makeFakeD1(),
+      VAPID_PUBLIC_KEY: vapid.publicKey,
+      VAPID_PRIVATE_KEY: vapid.privateKey,
+      VAPID_SUBJECT: 'https://cycle.ericc.ch',
+    }
+
+    // Public key route returns configured VAPID key
+    const keyRes = await worker.fetch(
+      new Request('https://cycle.ericc.ch/api/push/vapid-public-key'),
+      env,
+    )
+    expect(keyRes.status).toBe(200)
+    expect(await keyRes.json()).toEqual({ publicKey: vapid.publicKey })
+
+    const tokenA = 'a'.repeat(40)
+    const tokenB = 'b'.repeat(40)
+
+    // Rejects non-allowlisted endpoint (SSRF protection)
+    const badEndpoint = await worker.fetch(
+      new Request('https://cycle.ericc.ch/api/push/subscription', {
+        method: 'PUT',
+        headers: {
+          authorization: `Bearer ${tokenA}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          endpoint: 'https://internal.example.com/hook',
+          notifyAt: nowMs - 1000,
+        }),
+      }),
+      env,
+    )
+    expect(badEndpoint.status).toBe(400)
+
+    // Registers two due subscriptions
+    const subA = await worker.fetch(
+      new Request('https://cycle.ericc.ch/api/push/subscription', {
+        method: 'PUT',
+        headers: {
+          authorization: `Bearer ${tokenA}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          endpoint: 'https://web.push.apple.com/device-a',
+          notifyAt: nowMs - 1000,
+        }),
+      }),
+      env,
+    )
+    expect(subA.status).toBe(200)
+
+    // Run cron: delivers VAPID-signed push once and clears notify_at
+    await worker.scheduled({}, env)
+    expect(deliveries).toHaveLength(1)
+    expect(deliveries[0]?.url).toBe('https://web.push.apple.com/device-a')
+    expect(deliveries[0]?.auth.startsWith('vapid t=')).toBe(true)
+    expect(deliveries[0]?.auth).toContain(`, k=${vapid.publicKey}`)
+
+    // Running cron again does not duplicate delivery
+    await worker.scheduled({}, env)
+    expect(deliveries).toHaveLength(1)
+
+    // Subscription B returns 410 Gone -> deleted automatically
+    nextPushStatus = 410
+    await worker.fetch(
+      new Request('https://cycle.ericc.ch/api/push/subscription', {
+        method: 'PUT',
+        headers: {
+          authorization: `Bearer ${tokenB}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          endpoint: 'https://fcm.googleapis.com/fcm/send/device-b',
+          notifyAt: nowMs - 500,
+        }),
+      }),
+      env,
+    )
+    await worker.scheduled({}, env)
+    expect(deliveries).toHaveLength(2)
+
+    // Subsequent cron sees nothing left to send
+    nowMs += 60_000
+    await worker.scheduled({}, env)
+    expect(deliveries).toHaveLength(2)
+
+    // Explicit DELETE works
+    const del = await worker.fetch(
+      new Request('https://cycle.ericc.ch/api/push/subscription', {
+        method: 'DELETE',
+        headers: { authorization: `Bearer ${tokenA}` },
+      }),
+      env,
+    )
+    expect(del.status).toBe(200)
   })
 })

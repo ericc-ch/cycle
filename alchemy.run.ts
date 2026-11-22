@@ -4,6 +4,7 @@ import { adopt } from 'alchemy/AdoptPolicy'
 import { Stack } from 'alchemy/Stack'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
+import * as Redacted from 'effect/Redacted'
 
 const ZONE = 'ericc.ch'
 
@@ -27,10 +28,20 @@ export default Alchemy.Stack(
       simple: { limit: 60, period: 60 },
     })
 
+    const vapidEnv =
+      process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY
+        ? {
+            VAPID_PUBLIC_KEY: process.env.VAPID_PUBLIC_KEY,
+            VAPID_PRIVATE_KEY: Redacted.make(process.env.VAPID_PRIVATE_KEY),
+            VAPID_SUBJECT: process.env.VAPID_SUBJECT ?? `https://cycle.${ZONE}`,
+          }
+        : {}
+
     if (dev) {
       const api = yield* Cloudflare.Workers.Worker('Api', {
         main: 'apps/api/src/worker.ts',
         workersDev: true,
+        crons: ['0 * * * *'],
         dev: {
           port: 8787,
           strictPort: true,
@@ -38,6 +49,7 @@ export default Alchemy.Stack(
         env: {
           DB: syncDb,
           RATE_LIMIT_SYNC: rateLimit,
+          ...vapidEnv,
         },
       })
 
@@ -66,10 +78,12 @@ export default Alchemy.Stack(
     const api = yield* Cloudflare.Workers.Worker('Api', {
       main: 'apps/api/src/worker.ts',
       workersDev: false,
+      crons: ['0 * * * *'],
       routes: [{ pattern: `${host}/api/*`, zoneId: zone.zoneId }],
       env: {
         DB: syncDb,
         RATE_LIMIT_SYNC: rateLimit,
+        ...vapidEnv,
       },
     })
 
