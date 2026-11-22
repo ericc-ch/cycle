@@ -1,7 +1,6 @@
 {
   "name": "Cycle",
   "short_name": "Cycle",
-  "description": "Private, local-first period tracker with optional end-to-end encrypted sync.",
   "id": "/",
   "start_url": "/",
   "scope": "/",
