@@ -32,3 +32,9 @@ data/
 
 # Verification evidence
 .audit/
+
+# Alchemy local logs and cache
+.alchemy/
+
+# An exported log dropped at the repo root by a manual test
+cycle-logs.json

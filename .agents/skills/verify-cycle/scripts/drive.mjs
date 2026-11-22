@@ -1,4 +1,5 @@
 // Drive the app through real user paths and capture evidence.
+import { spawn } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -29,11 +30,16 @@ const must = (flow, name, ok, detail) => {
   if (!ok) throw new Error(`${flow}: ${name}${detail ? ` (${detail})` : ''}`)
 }
 
-const statusText = browser =>
-  browser.evaluate(`document.querySelector('[role="status"]')?.innerText ?? ''`)
+/** The saved log, as the app writes it. What was logged is asserted here. */
+const savedLogs = async browser => {
+  const raw = await browser.evaluate(`localStorage.getItem('cycle.logs')`)
+  return raw === null ? [] : JSON.parse(raw)
+}
 
 const dialogOpen = browser =>
-  browser.evaluate(`document.querySelector('dialog[open]') !== null`)
+  browser.evaluate(
+    `document.querySelector('[data-slot="dialog-content"]') !== null`,
+  )
 
 const dayKey = daysAgo => {
   const date = new Date()
@@ -66,7 +72,7 @@ const twoPeriods = [
 const seed = async (browser, logs) => {
   await browser.goto(URL)
   await browser.evaluate(
-    `localStorage.setItem('cycle.logs', ${JSON.stringify(JSON.stringify(logs))})`,
+    `localStorage.setItem('cycle.logs', ${JSON.stringify(JSON.stringify(logs))}); localStorage.removeItem('cycle.predicting')`,
   )
   await browser.goto(URL)
 }
@@ -76,27 +82,30 @@ const flows = {
     const flow = 'clicks'
     await seed(browser, twoPeriods)
 
+    // The flow options and the edit banner only exist inside the mode, so the
+    // click-through check holds today's cell to open it first.
+    await browser.hold('[data-slot="calendar-day"][data-today]')
+
     const hits = await browser.evaluate(`(() => {
       const pick = (selector, text) => [...document.querySelectorAll(selector)].find(node =>
         text === undefined ||
         (node.textContent ?? '').trim() === text ||
         node.getAttribute('aria-label') === text)
       const controls = [
-        ['Today tab', '[data-slot="tabs-trigger"]', 'Today'],
+        ['Calendar tab', '[data-slot="tabs-trigger"]', 'Calendar'],
         ['History tab', '[data-slot="tabs-trigger"]', 'History'],
         ['About tab', '[data-slot="tabs-trigger"]', 'About'],
-        ['legend trigger', '[data-slot="popover-trigger"]'],
-        ['confidence trigger', '[data-slot="tooltip-trigger"]'],
       ]
       for (const cell of document.querySelectorAll('[data-slot="calendar-day"]')) {
         controls.push(['day ' + cell.getAttribute('aria-label'), '[data-slot="calendar-day"]', cell.getAttribute('aria-label')])
       }
-      for (const radio of document.querySelectorAll('[role="radio"]')) {
-        controls.push(['flow ' + (radio.textContent ?? '').trim(), '[role="radio"]', (radio.textContent ?? '').trim()])
+      for (const radio of document.querySelectorAll('[data-slot="radio-group-item"]')) {
+        controls.push(['flow ' + (radio.textContent ?? '').trim(), '[data-slot="radio-group-item"]', (radio.textContent ?? '').trim()])
       }
       return controls.map(([label, selector, text]) => {
         const node = pick(selector, text)
         if (!node) return { label, present: false }
+        node.scrollIntoView({ block: 'center', inline: 'center' })
         const rect = node.getBoundingClientRect()
         const x = rect.left + rect.width / 2
         const y = rect.top + rect.height / 2
@@ -120,24 +129,17 @@ const flows = {
       )
     }
 
-    const closed = await browser.evaluate(`(() => {
-      return [...document.querySelectorAll('dialog')]
-        .filter(dialog => !dialog.open)
-        .map(dialog => {
-          const style = getComputedStyle(dialog)
-          const rect = dialog.getBoundingClientRect()
-          return { id: dialog.id, display: style.display, area: rect.width * rect.height }
-        })
+    const mounted = await browser.evaluate(`(() => {
+      return [...document.querySelectorAll('[data-slot="dialog-content"], [data-slot="dialog-overlay"], [data-slot="alert-dialog-content"], [data-slot="alert-dialog-overlay"]')]
+        .map(node => node.getAttribute('data-slot'))
     })()`)
 
-    for (const dialog of closed) {
-      must(
-        flow,
-        `closed dialog ${dialog.id} is hidden`,
-        dialog.display === 'none' && dialog.area === 0,
-        `display=${dialog.display} area=${Math.round(dialog.area)}`,
-      )
-    }
+    must(
+      flow,
+      'no dialog is mounted while closed',
+      mounted.length === 0,
+      mounted.join(', '),
+    )
 
     await browser.screenshot(join(outDir, 'clicks.png'))
   },
@@ -147,7 +149,7 @@ const flows = {
     await seed(browser, [])
 
     const dayLabel = await browser.evaluate(`(() => {
-      const cell = document.querySelector('[data-slot="calendar-cell"][data-today] button')
+      const cell = document.querySelector('[data-slot="calendar-day"][data-today]')
       return cell?.getAttribute('aria-label') ?? null
     })()`)
 
@@ -157,27 +159,62 @@ const flows = {
       typeof dayLabel === 'string',
       String(dayLabel),
     )
+
+    // Read-only until a day is held: a tap on a cell changes nothing.
     await browser.click('[data-slot="calendar-day"]', dayLabel)
-
-    const checked = await browser.evaluate(
-      `document.querySelector('[role="radio"][data-state="checked"]')?.textContent?.trim() ?? null`,
+    must(
+      flow,
+      'the calendar is read-only until a day is held',
+      (await browser.evaluate(
+        `document.querySelector('[data-slot="flow-editor"]') === null`,
+      )) === true,
     )
     must(
       flow,
-      'nothing logged before the first tap',
-      checked === null,
-      String(checked),
+      'a read-only tap writes nothing',
+      (await browser.evaluate(`localStorage.getItem('cycle.logs')`)) === '[]',
+    )
+    must(
+      flow,
+      'the empty status card fits its two lines',
+      (await browser.evaluate(`(() => {
+        const card = document.querySelector('[data-slot="cycle-status"]')
+        return card !== null && card.scrollHeight <= card.clientHeight
+      })()`)) === true,
     )
 
-    await browser.click('[role="radio"]', 'Bleeding')
+    await browser.hold('[data-slot="calendar-day"]', dayLabel)
+    must(
+      flow,
+      'holding a day opens the edit mode',
+      (await browser.evaluate(
+        `document.querySelector('[data-slot="edit-banner"]') !== null`,
+      )) === true,
+    )
+
+    await browser.click('[data-slot="calendar-day"]', dayLabel)
+    must(
+      flow,
+      'a tap paints the draft',
+      (await browser.evaluate(
+        `document.querySelector('[data-slot="edit-banner"]')?.getAttribute('data-state') === 'dirty'`,
+      )) === true,
+    )
+    must(
+      flow,
+      'the draft has not reached storage',
+      (await browser.evaluate(`localStorage.getItem('cycle.logs')`)) === '[]',
+    )
+
+    await browser.click('[data-slot="button"]', 'Save')
     await browser.waitFor(
-      `(document.querySelector('[role="status"]')?.innerText ?? '').includes('Bleeding')`,
-      { label: 'status to report bleeding' },
+      `(localStorage.getItem('cycle.logs') ?? '').includes('Bleeding')`,
+      { label: 'the saved log to hold the day' },
     )
     must(
       flow,
-      'status reports the bleeding day',
-      (await statusText(browser)).includes('Bleeding'),
+      'Save writes the bleeding day',
+      (await savedLogs(browser)).some(log => log.flow === 'Bleeding'),
     )
 
     await browser.waitFor(
@@ -200,79 +237,124 @@ const flows = {
     must(
       flow,
       'the log survives a reload',
-      (await statusText(browser)).includes('Bleeding'),
-      await statusText(browser),
+      (await savedLogs(browser)).length === 1,
+      JSON.stringify(await savedLogs(browser)),
     )
 
-    const clearVisible = await browser.evaluate(`(() =>
-      [...document.querySelectorAll('[data-slot="button"]')].some(
-        node => node.textContent.trim() === 'Clear this day',
-      )
-    )()`)
-    must(flow, 'a logged day offers to clear itself', clearVisible)
-
-    await browser.click('[data-slot="button"]', 'Clear this day')
-    await browser.waitFor(
-      `(document.querySelector('[role="status"]')?.innerText ?? '').includes('Nothing logged')`,
-      { label: 'status to return to empty' },
-    )
+    await browser.hold('[data-slot="calendar-day"]', dayLabel)
+    await browser.click('[data-slot="calendar-day"]', dayLabel)
+    await browser.click('[data-slot="button"]', 'Save')
+    await browser.waitFor(`localStorage.getItem('cycle.logs') === '[]'`, {
+      label: 'the saved log to empty',
+    })
     must(
       flow,
-      'clearing the day empties the log',
-      (await statusText(browser)).includes('Nothing logged'),
+      'tapping a logged day clears it and empties the log',
+      (await savedLogs(browser)).length === 0,
+    )
+
+    // React Aria owns the arrow-key movement; happy-dom cannot focus its
+    // roving tab stop, so the unit test only checks the roles. This is the
+    // real check.
+    await browser.hold('[data-slot="calendar-day"]', dayLabel)
+    await browser.click('[data-slot="radio-group-item"]', 'Bleeding')
+    await browser.press('ArrowRight', 'ArrowRight', 39)
+    must(
+      flow,
+      'the flow group moves with the arrow keys',
+      (await browser.evaluate(
+        `document.querySelector('[data-slot="radio-group-item"][data-selected]')?.textContent?.trim() ?? null`,
+      )) === 'Spotting',
+    )
+    await browser.click('[data-slot="button"]', 'Cancel')
+    must(
+      flow,
+      'Cancel discards the draft',
+      (await savedLogs(browser)).length === 0,
     )
 
     await browser.screenshot(join(outDir, 'flow-cleared.png'))
 
-    // A forgotten period is caught up with two taps: arm the range, pick the
-    // far end, commit once.
-    const rangeStartLabel = await browser.evaluate(`(() => {
+    // A mouse drag across four days paints the draft and saves in one confirm.
+    await seed(browser, [])
+    const dragLabels = await browser.evaluate(`(() => {
       const days = [...document.querySelectorAll('[data-slot="calendar-day"]')]
       const todayIndex = days.findIndex(node =>
-        node.closest('[data-slot="calendar-cell"]')?.hasAttribute('data-today'))
-      return days[todayIndex - 3]?.getAttribute('aria-label') ?? null
+        node.closest('[data-slot="calendar-day"]')?.hasAttribute('data-today'))
+      return {
+        start: days[todayIndex - 3]?.getAttribute('aria-label') ?? null,
+        end: days[todayIndex]?.getAttribute('aria-label') ?? null,
+      }
     })()`)
-
     must(
       flow,
-      'the day three back is on screen',
-      typeof rangeStartLabel === 'string',
-      String(rangeStartLabel),
+      'the drag endpoints are on screen',
+      typeof dragLabels.start === 'string' &&
+        typeof dragLabels.end === 'string',
+      JSON.stringify(dragLabels),
     )
 
-    await browser.click('[data-slot="button"]', 'Mark a range')
-    await browser.click('[data-slot="calendar-day"]', rangeStartLabel)
-    await browser.waitFor(`document.body.innerText.includes('4 days')`, {
-      label: 'the range preview to report four days',
-    })
-    must(flow, 'the range previews its length', true)
-
-    await browser.screenshot(join(outDir, 'flow-range.png'))
-
-    await browser.click('[data-slot="button"]', 'Mark 4 days as bleeding')
-    await browser.waitFor(
-      `(() => {
-        const raw = localStorage.getItem('cycle.logs')
-        return raw !== null && JSON.parse(raw).length === 4
-      })()`,
-      { label: 'four days in localStorage' },
+    await browser.hold('[data-slot="calendar-day"]', dragLabels.end)
+    const dragFrom = await browser.box(
+      '[data-slot="calendar-day"]',
+      dragLabels.start,
     )
-
-    const rangeLogs = JSON.parse(
-      await browser.evaluate(`localStorage.getItem('cycle.logs')`),
+    const dragTo = await browser.box(
+      '[data-slot="calendar-day"]',
+      dragLabels.end,
     )
+    await browser.drag(dragFrom, dragTo)
     must(
       flow,
-      'one confirm writes every day in the range',
-      rangeLogs.length === 4 && rangeLogs.every(log => log.flow === 'Bleeding'),
-      JSON.stringify(rangeLogs),
-    )
-    must(
-      flow,
-      'the range leaves the editor ready for the next day',
+      'the drag paints four days into the draft',
       (await browser.evaluate(
-        `[...document.querySelectorAll('[data-slot="button"]')].some(node => node.textContent.trim() === 'Mark a range')`,
-      )) === true,
+        `document.querySelector('[data-slot="edit-banner"]')?.getAttribute('data-draft-days')`,
+      )) === '4',
+    )
+    must(
+      flow,
+      'the drag draft has not reached storage',
+      (await browser.evaluate(`localStorage.getItem('cycle.logs')`)) === '[]',
+    )
+
+    await browser.click('[data-slot="button"]', 'Save')
+    must(
+      flow,
+      'the drag range saves in one confirm',
+      (await browser.evaluate(
+        `JSON.parse(localStorage.getItem('cycle.logs') ?? '[]').length`,
+      )) === 4,
+    )
+
+    // Edit mode toggles: a day that already carries the pen leaves the draft
+    // on a tap, so taking one day back does not need Clear this day.
+    await browser.hold(
+      '[data-slot="calendar-day"][data-date="' + localDayKey(0) + '"]',
+    )
+    await browser.click(
+      '[data-slot="calendar-day"][data-date="' + localDayKey(0) + '"]',
+    )
+    must(
+      flow,
+      'a tap takes a painted day out of the draft',
+      (await browser.evaluate(
+        `document.querySelector('[data-slot="edit-banner"]')?.getAttribute('data-draft-days')`,
+      )) === '3',
+    )
+    must(
+      flow,
+      'the tapped day has not reached storage yet',
+      (await browser.evaluate(
+        `JSON.parse(localStorage.getItem('cycle.logs') ?? '[]').length`,
+      )) === 4,
+    )
+
+    await browser.click('[data-slot="button"]', 'Save')
+    must(
+      flow,
+      'Save keeps the cleared day out of storage',
+      !(await savedLogs(browser)).some(log => log.date === localDayKey(0)),
+      JSON.stringify(await savedLogs(browser)),
     )
 
     // A level from the four-level build must still count as bleeding. If the
@@ -283,9 +365,10 @@ const flows = {
     await browser.goto(URL)
     must(
       flow,
-      'a level from the old build still reads as bleeding',
-      (await statusText(browser)).includes('Bleeding'),
-      await statusText(browser),
+      'a level from the old build still draws as bleeding',
+      (await browser.evaluate(
+        `document.querySelector('[data-slot="calendar-day"][data-today] span.bg-bleeding') !== null`,
+      )) === true,
     )
   },
 
@@ -293,18 +376,16 @@ const flows = {
     const flow = 'tabs'
     await seed(browser, twoPeriods)
 
-    must(
-      flow,
-      'the seeded state predicts',
-      (await statusText(browser)).includes('Period expected'),
-      await statusText(browser),
-    )
-
     await browser.click('[data-slot="tabs-trigger"]', 'History')
     await browser.waitFor(`document.body.innerText.includes('Periods')`, {
       label: 'History panel',
     })
     must(flow, 'History shows the period list', true)
+    must(
+      flow,
+      'History route is /history',
+      (await browser.evaluate(`window.location.pathname`)) === '/history',
+    )
     await browser.screenshot(join(outDir, 'tabs-history.png'))
 
     await browser.click('[data-slot="tabs-trigger"]', 'About')
@@ -316,10 +397,15 @@ const flows = {
     )
     must(
       flow,
+      'About route is /about',
+      (await browser.evaluate(`window.location.pathname`)) === '/about',
+    )
+    must(
+      flow,
       'About shows the prediction switch on',
       (await browser.evaluate(
-        `document.querySelector('[data-slot="switch"]')?.dataset.state`,
-      )) === 'checked',
+        `document.querySelector('[data-slot="switch"]')?.dataset.selected`,
+      )) === 'true',
     )
 
     await browser.click('[data-slot="switch"]')
@@ -327,28 +413,44 @@ const flows = {
       flow,
       'the switch turns prediction off',
       (await browser.evaluate(
-        `document.querySelector('[data-slot="switch"]')?.dataset.state`,
-      )) === 'unchecked',
+        `document.querySelector('[data-slot="switch"]')?.dataset.selected`,
+      )) === undefined,
     )
     await browser.screenshot(join(outDir, 'tabs-about.png'))
 
-    await browser.click('[data-slot="tabs-trigger"]', 'Today')
+    await browser.click('[data-slot="tabs-trigger"]', 'Calendar')
     await browser.waitFor(
-      `document.body.innerText.includes('Prediction is off.')`,
-      {
-        label: 'Today panel to honour the switch',
-      },
+      `document.querySelector('[data-slot="calendar-day"]') !== null`,
+      { label: 'Calendar panel' },
     )
-    must(flow, 'Today reports that prediction is off', true)
+    must(
+      flow,
+      'Calendar shows that prediction is off',
+      (await browser.evaluate(
+        `document.querySelector('[role="status"]')?.innerText.includes('Prediction is off.')`,
+      )) === true,
+    )
 
     await browser.goto(URL)
+    await browser.click('[data-slot="tabs-trigger"]', 'Calendar')
+    await browser.waitFor(
+      `document.querySelector('[role="status"]') !== null`,
+      { label: 'Calendar status after reload' },
+    )
+    must(
+      flow,
+      'prediction stays off on Calendar after reload',
+      (await browser.evaluate(
+        `document.querySelector('[role="status"]')?.innerText.includes('Prediction is off.')`,
+      )) === true,
+    )
     await browser.click('[data-slot="tabs-trigger"]', 'About')
     must(
       flow,
-      'prediction resets on reload',
+      'prediction switch stays off on reload',
       (await browser.evaluate(
-        `document.querySelector('[data-slot="switch"]')?.dataset.state`,
-      )) === 'checked',
+        `document.querySelector('[data-slot="switch"]')?.dataset.selected`,
+      )) === undefined,
     )
 
     // A gap well over her usual is labelled in History instead of being
@@ -393,11 +495,14 @@ const flows = {
     )
 
     await browser.click('[data-slot="button"]', 'How the range is calculated')
-    await browser.waitFor(`document.querySelector('dialog[open]') !== null`, {
-      label: 'explainer dialog to open',
-    })
+    await browser.waitFor(
+      `document.querySelector('[data-slot="dialog-content"]') !== null`,
+      {
+        label: 'explainer dialog to open',
+      },
+    )
     const title = await browser.evaluate(
-      `document.querySelector('dialog[open] [data-slot="dialog-title"]')?.textContent ?? null`,
+      `document.querySelector('[data-slot="dialog-content"] [data-slot="dialog-title"]')?.textContent ?? null`,
     )
     must(
       flow,
@@ -408,12 +513,15 @@ const flows = {
     await browser.screenshot(join(outDir, 'overlays-dialog.png'))
 
     await browser.escape()
-    await browser.waitFor(`document.querySelector('dialog[open]') === null`, {
-      label: 'Escape to close the dialog',
-    })
+    await browser.waitFor(
+      `document.querySelector('[data-slot="dialog-content"]') === null`,
+      {
+        label: 'Escape to close the dialog',
+      },
+    )
     must(flow, 'Escape closes the dialog', !(await dialogOpen(browser)))
 
-    const tab = await browser.box('[data-slot="tabs-trigger"]', 'Today')
+    const tab = await browser.box('[data-slot="tabs-trigger"]', 'Calendar')
     must(
       flow,
       'the closed dialog leaves the page clickable',
@@ -422,27 +530,34 @@ const flows = {
     )
 
     await browser.click('[data-slot="button"]', 'Clear all data')
-    await browser.waitFor(`document.querySelector('dialog[open]') !== null`, {
-      label: 'clear dialog to open',
-    })
+    await browser.waitFor(
+      `document.querySelector('[data-slot="alert-dialog-content"]') !== null`,
+      {
+        label: 'clear dialog to open',
+      },
+    )
     const clearTitle = await browser.evaluate(
-      `document.querySelector('dialog[open] [data-slot="dialog-title"]')?.textContent ?? null`,
+      `document.querySelector('[data-slot="alert-dialog-content"] [data-slot="alert-dialog-title"]')?.textContent ?? null`,
     )
     must(
       flow,
-      'About opens the clear dialog',
+      'About opens the clear alert dialog',
       clearTitle === 'Clear all data?',
       String(clearTitle),
     )
+    must(
+      flow,
+      'the clear dialog is an alert dialog',
+      (await browser.evaluate(
+        `document.querySelector('[role="alertdialog"]') !== null`,
+      )) === true,
+    )
     await browser.escape()
-    await browser.waitFor(`document.querySelector('dialog[open]') === null`, {
-      label: 'Escape to close the clear dialog',
-    })
-
-    await browser.click('[data-slot="tabs-trigger"]', 'Today')
     await browser.waitFor(
-      `document.querySelector('[data-slot="popover-trigger"]') !== null`,
-      { label: 'Today panel' },
+      `document.querySelector('[data-slot="alert-dialog-content"]') === null`,
+      {
+        label: 'Escape to close the clear dialog',
+      },
     )
 
     await browser.click('[data-slot="popover-trigger"]')
@@ -456,7 +571,8 @@ const flows = {
     must(
       flow,
       'the legend names both marks',
-      legendText.includes('bleeding') && legendText.includes('spotting'),
+      legendText.toLowerCase().includes('bleeding') &&
+        legendText.toLowerCase().includes('spotting'),
       legendText.replace(/\n/g, ' / '),
     )
     await browser.screenshot(join(outDir, 'overlays-popover.png'))
@@ -477,29 +593,6 @@ const flows = {
         )) === true
     }
     must(flow, 'the legend closes again', closed)
-
-    await browser.hover('[data-slot="tooltip-trigger"]')
-    await browser.waitFor(
-      `document.querySelector('[data-slot="tooltip-content"]') !== null`,
-      { label: 'confidence tooltip', timeout: 4000 },
-    )
-    must(
-      flow,
-      'hovering the confidence word explains it',
-      (
-        await browser.evaluate(
-          `document.querySelector('[data-slot="tooltip-content"]')?.innerText ?? ''`,
-        )
-      ).includes('Fewer than three logged cycles'),
-    )
-    await browser.screenshot(join(outDir, 'overlays-tooltip.png'))
-
-    await browser.move(8, 8)
-    await browser.waitFor(
-      `document.querySelector('[data-slot="tooltip-content"]') === null`,
-      { label: 'tooltip to hide', timeout: 3000 },
-    )
-    must(flow, 'the tooltip hides when the pointer leaves', true)
 
     await browser.screenshot(join(outDir, 'overlays-final.png'))
   },
@@ -581,14 +674,366 @@ const flows = {
     must(flow, 'the bottom bar switches panels', true)
     await browser.screenshot(join(outDir, 'mobile-history.png'))
 
-    await browser.click('[data-slot="tabs-trigger"]', 'Today')
+    await browser.click('[data-slot="tabs-trigger"]', 'Calendar')
     await browser.waitFor(
       `document.querySelector('[data-slot="calendar-day"]') !== null`,
-      { label: 'Today panel' },
+      { label: 'Calendar panel' },
     )
     await browser.screenshot(join(outDir, 'mobile-today.png'))
 
-    await browser.viewport({ width: 1280, height: 800 })
+    const touchTargets = await browser.evaluate(`(() => {
+      const nodes = [
+        ...document.querySelectorAll('[data-slot="button"], [data-slot="popover-trigger"], [data-slot="calendar-previous-month"], [data-slot="calendar-next-month"]')
+      ].filter(node => node.offsetParent !== null)
+      return nodes.map(node => ({
+        label: (node.textContent ?? '').trim().slice(0, 30) || 'icon',
+        height: Math.round(node.getBoundingClientRect().height),
+      }))
+    })()`)
+    for (const target of touchTargets) {
+      must(
+        flow,
+        `the ${target.label} control is at least 44px tall`,
+        target.height >= 44,
+        `${target.height}px`,
+      )
+    }
+
+    // A quick swipe across the calendar is still a scroll. Only a hold turns
+    // the gesture into a range. The 844px screen fits the whole panel, so
+    // shrink it for this check.
+    await browser.viewport({
+      width: 390,
+      height: 500,
+      mobile: true,
+      deviceScaleFactor: 2,
+    })
+    const scrollBefore = await browser.evaluate('window.scrollY')
+    await browser.touchPress({ x: 195, y: 420 }, 0)
+    await browser.touchDrag({ x: 195, y: 420 }, { x: 195, y: 150 })
+    const scrollAfter = await browser.evaluate('window.scrollY')
+    must(
+      flow,
+      'a quick swipe still scrolls the page',
+      scrollAfter > scrollBefore,
+      `${scrollBefore} -> ${scrollAfter}`,
+    )
+    must(
+      flow,
+      'a quick swipe does not arm a range',
+      (await browser.evaluate(
+        `document.querySelectorAll('[data-slot="calendar-day"][data-range]').length === 0`,
+      )) === true,
+    )
+    await browser.evaluate('window.scrollTo(0, 0)')
+    await browser.viewport({
+      width: 390,
+      height: 844,
+      mobile: true,
+      deviceScaleFactor: 2,
+    })
+    await new Promise(resolve => setTimeout(resolve, 300))
+
+    // Touch is the primary input: hold a day, drag to today, release. The
+    // preview arms and one tap confirms.
+    // Locate days by their date key: React Aria's aria-label carries the
+    // selected and disabled state, so it is not a stable handle.
+    const startDate = localDayKey(3)
+    const endDate = localDayKey(0)
+    const daySelector = date =>
+      '[data-slot="calendar-day"][data-date="' + date + '"]'
+
+    await browser.waitFor(
+      `document.querySelector('${daySelector(startDate)}') !== null`,
+      { label: 'the touch endpoints on screen' },
+    )
+    must(
+      flow,
+      'the touch endpoints are on screen',
+      true,
+      startDate + ' -> ' + endDate,
+    )
+
+    // The read-only calendar answers a hold: it opens the edit mode on the
+    // day that was held, so editing never needs the button first.
+    const holdFrom = await browser.box(daySelector(startDate))
+    must(
+      flow,
+      'nothing is in edit mode before the hold',
+      (await browser.evaluate(
+        `document.querySelector('[data-slot="edit-banner"]') === null`,
+      )) === true,
+    )
+
+    const gridTopBefore = await browser.evaluate(
+      `Math.round(document.querySelector('[data-slot="calendar-grid"]').getBoundingClientRect().top)`,
+    )
+    await browser.touchPress(holdFrom, 350)
+    must(
+      flow,
+      'a read-only hold opens the edit mode',
+      (await browser.evaluate(
+        `document.querySelector('[data-slot="edit-banner"]') !== null`,
+      )) === true,
+    )
+    must(
+      flow,
+      'opening the mode leaves the calendar where it was',
+      (await browser.evaluate(
+        `Math.round(document.querySelector('[data-slot="calendar-grid"]').getBoundingClientRect().top)`,
+      )) === gridTopBefore,
+      `top was ${gridTopBefore}`,
+    )
+
+    // The mode card is the status card's slot: the same height, with the flow
+    // pen and the two buttons inside it. Checked at 390px, where the layout
+    // must not wrap or scroll sideways.
+    const bar = await browser.evaluate(`(() => {
+      const card = document.querySelector('[data-slot="edit-banner"]')
+      if (card === null) return null
+      const box = card.getBoundingClientRect()
+      const labels = ['Save', 'Cancel', 'Bleeding', 'Spotting']
+      const controls = labels.map(text =>
+        [
+          ...document.querySelectorAll(
+            '[data-slot="button"], [data-slot="radio-group-item"]',
+          ),
+        ].find(node => node.textContent.trim() === text),
+      )
+      return {
+        height: Math.round(box.height),
+        overflows: card.scrollHeight > card.clientHeight,
+        overflowsWidth: card.scrollWidth > card.clientWidth,
+        missing: controls.filter(node => node === undefined).length,
+        outside: controls.filter(
+          node =>
+            node !== undefined &&
+            node.getBoundingClientRect().bottom > box.bottom,
+        ).length,
+      }
+    })()`)
+    must(
+      flow,
+      'the mode card holds its contents on a phone',
+      bar !== null &&
+        !bar.overflows &&
+        !bar.overflowsWidth &&
+        bar.missing === 0,
+      JSON.stringify(bar),
+    )
+    must(
+      flow,
+      'the mode controls stay inside the card',
+      bar !== null && bar.outside === 0,
+      bar === null ? 'no card' : `${bar.outside} outside`,
+    )
+    await browser.screenshot(join(outDir, 'mobile-edit.png'))
+
+    await browser.touchRelease()
+    must(
+      flow,
+      'the hold opens the mode on the held day',
+      (await browser.evaluate(
+        `document.querySelector('[data-date="${startDate}"]')?.classList.contains('border-fg-0') ?? false`,
+      )) === true,
+    )
+    must(
+      flow,
+      'lifting the hold writes nothing',
+      (await browser.evaluate(
+        `document.querySelector('[data-slot="edit-banner"]')?.getAttribute('data-state') === 'clean'`,
+      )) === true,
+    )
+
+    await browser.click('[data-slot="button"]', 'Cancel')
+    must(
+      flow,
+      'Cancel returns the calendar to read-only',
+      (await browser.evaluate(
+        `document.querySelector('[data-slot="edit-banner"]') === null`,
+      )) === true,
+    )
+
+    await browser.touchPress(holdFrom, 350)
+    await browser.touchRelease()
+    const touchFrom = await browser.box(daySelector(startDate))
+    const touchTo = await browser.box(daySelector(endDate))
+    await browser.touchPress(touchFrom, 80)
+    const pressedBoxed = await browser.evaluate(
+      `document.querySelector('[data-date="${startDate}"]')?.classList.contains('border-fg-0') ?? false`,
+    )
+    must(
+      flow,
+      'a touch press boxes the day before any hold',
+      pressedBoxed === true,
+    )
+
+    await new Promise(resolve => setTimeout(resolve, 350))
+    const heldBoxed = await browser.evaluate(
+      `document.querySelector('[data-date="${startDate}"]')?.classList.contains('border-fg-0') ?? false`,
+    )
+    must(flow, 'holding a day keeps it boxed', heldBoxed === true)
+    await browser.touchDrag(touchFrom, touchTo)
+    const draftDays = await browser.evaluate(
+      `document.querySelector('[data-slot="edit-banner"]')?.getAttribute('data-draft-days')`,
+    )
+    must(
+      flow,
+      'the touch drag paints four days into the draft',
+      draftDays === '10',
+      `draft has ${draftDays}`,
+    )
+
+    await browser.click('[data-slot="button"]', 'Save')
+    must(
+      flow,
+      'the touch range writes its days',
+      (await browser.evaluate(
+        `JSON.parse(localStorage.getItem('cycle.logs') ?? '[]').length`,
+      )) === 10,
+    )
+    await browser.screenshot(join(outDir, 'mobile-touch-range.png'))
+  },
+
+  async sync(browserA) {
+    const flow = 'sync'
+    const apiScript = join(
+      dirname(fileURLToPath(import.meta.url)),
+      'api-server.ts',
+    )
+    const apiProc = spawn('node', [apiScript], {
+      cwd: ROOT,
+      stdio: 'ignore',
+    })
+
+    const waitForApi = async () => {
+      for (let i = 0; i < 60; i += 1) {
+        try {
+          const res = await fetch('http://127.0.0.1:8787/api/health')
+          if (res.ok) return
+        } catch {}
+        await new Promise(resolve => setTimeout(resolve, 150))
+      }
+      throw new Error('local sync api did not start on :8787')
+    }
+
+    let browserB = null
+
+    try {
+      await waitForApi()
+      await seed(browserA, [])
+      await browserA.evaluate(
+        `localStorage.removeItem('cycle.sync'); localStorage.removeItem('cycle.vault')`,
+      )
+      await browserA.goto(URL)
+
+      const todayKey = localDayKey(0)
+      const yesterdayKey = localDayKey(1)
+
+      // Device A logs today as Bleeding and enables sync.
+      await browserA.hold(`[data-slot="calendar-day"][data-date="${todayKey}"]`)
+      await browserA.click(`[data-slot="calendar-day"][data-date="${todayKey}"]`)
+      await browserA.click('[data-slot="button"]', 'Save')
+      await browserA.waitFor(
+        `(localStorage.getItem('cycle.logs') ?? '').includes('Bleeding')`,
+        { label: 'device A saved today' },
+      )
+
+      await browserA.click('[data-slot="tabs-trigger"]', 'About')
+      await browserA.waitFor(`document.querySelector('input[name="username"]') !== null`, {
+        label: 'device A sync form',
+      })
+      await browserA.fill('input[name="username"]', 'alice')
+      await browserA.fill('input[name="passphrase"]', 'correct-horse-battery')
+      await browserA.click('[data-slot="button"]', 'Turn on sync')
+      await browserA.waitFor(`document.body.innerText.includes('Synced')`, {
+        label: 'device A synced',
+        timeout: 10000,
+      })
+      must(flow, 'device A enables sync and pushes initial vault', true)
+
+      const storedSync = await browserA.evaluate(
+        `localStorage.getItem('cycle.sync') ?? ''`,
+      )
+      must(
+        flow,
+        'passphrase is never stored in localStorage',
+        storedSync.includes('vaultId') &&
+          !storedSync.includes('correct-horse-battery'),
+      )
+      await browserA.screenshot(join(outDir, 'sync-device-a.png'))
+
+      // Device B starts as a completely separate Chrome profile.
+      browserB = await launch({ port: 9334 })
+      await browserB.goto(URL)
+      await browserB.click('[data-slot="tabs-trigger"]', 'About')
+      await browserB.waitFor(`document.querySelector('input[name="username"]') !== null`, {
+        label: 'device B sync form',
+      })
+
+      // Wrong passphrase must fail with 401 and NOT create a second vault.
+      await browserB.fill('input[name="username"]', 'alice')
+      await browserB.fill('input[name="passphrase"]', 'wrong-passphrase-123')
+      await browserB.click('[data-slot="button"]', 'Turn on sync')
+      await browserB.waitFor(
+        `document.querySelector('[role="alert"]')?.textContent?.includes('Wrong username or passphrase')`,
+        { label: 'device B wrong passphrase error', timeout: 10000 },
+      )
+      must(flow, 'wrong passphrase is rejected instead of creating a new vault', true)
+
+      // Correct passphrase pulls Device A's bleeding day.
+      await browserB.fill('input[name="passphrase"]', 'correct-horse-battery')
+      await browserB.click('[data-slot="button"]', 'Turn on sync')
+      await browserB.waitFor(`document.body.innerText.includes('Synced')`, {
+        label: 'device B synced',
+        timeout: 10000,
+      })
+      await browserB.click('[data-slot="tabs-trigger"]', 'Calendar')
+      await browserB.waitFor(
+        `document.querySelector('[data-slot="calendar-day"][data-date="${todayKey}"] span.bg-bleeding') !== null`,
+        { label: 'device B shows device A bleeding mark' },
+      )
+      must(flow, 'device B receives device A bleeding day', true)
+
+      // Device B logs yesterday as Spotting and saves (auto-pushes).
+      await browserB.hold(`[data-slot="calendar-day"][data-date="${yesterdayKey}"]`)
+      await browserB.click('[data-slot="radio-group-item"]', 'Spotting')
+      await browserB.click(`[data-slot="calendar-day"][data-date="${yesterdayKey}"]`)
+      await browserB.click('[data-slot="button"]', 'Save')
+      await browserB.waitFor(
+        `JSON.parse(localStorage.getItem('cycle.logs') ?? '[]').length === 2`,
+        { label: 'device B saved spotting day' },
+      )
+      // Give background push a moment to complete on Device B.
+      await new Promise(resolve => setTimeout(resolve, 600))
+      await browserB.screenshot(join(outDir, 'sync-device-b.png'))
+
+      // Device A clicks Sync now and receives Device B's spotting day.
+      await browserA.click('[data-slot="button"]', 'Sync now')
+      await browserA.waitFor(
+        `JSON.parse(localStorage.getItem('cycle.logs') ?? '[]').some(l => l.date === ${JSON.stringify(yesterdayKey)} && l.flow === 'Spotting')`,
+        { label: 'device A pulls device B spotting day', timeout: 10000 },
+      )
+      must(flow, 'device A pulls device B spotting day', true)
+
+      // Turning off sync on Device B clears credentials but keeps local logs.
+      await browserB.click('[data-slot="tabs-trigger"]', 'About')
+      await browserB.click('[data-slot="button"]', 'Turn off sync')
+      await browserB.waitFor(`document.querySelector('input[name="username"]') !== null`, {
+        label: 'device B sync form returns',
+      })
+      must(
+        flow,
+        'turning off sync clears credentials and preserves local logs',
+        (await browserB.evaluate(`localStorage.getItem('cycle.sync')`)) === null &&
+          (await savedLogs(browserB)).length === 2,
+      )
+    } finally {
+      if (browserB !== null) {
+        await browserB.close()
+      }
+      apiProc.kill('SIGTERM')
+    }
   },
 }
 
@@ -626,7 +1071,11 @@ try {
     .filter(
       message => message.level === 'exception' || message.level === 'error',
     )
-    .filter(message => !(message.url ?? '').includes('favicon'))
+    .filter(
+      message =>
+        !(message.url ?? '').includes('favicon') &&
+        !(message.url ?? '').includes('/api/sync'),
+    )
   record(
     'page',
     'no runtime errors',

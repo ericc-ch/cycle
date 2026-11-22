@@ -194,6 +194,21 @@ export const launch = async ({ port = 9333 } = {}) => {
 
   const box = (selector, text = null) => evaluate(find(selector, text))
 
+  // Bring a target into the viewport before a click. `box` stays pure so a
+  // caller can measure two points, such as a drag, at the same scroll offset.
+  const scrollInto = async (selector, text = null) => {
+    await evaluate(`(() => {
+      const nodes = [...document.querySelectorAll(${JSON.stringify(selector)})]
+      const target = ${JSON.stringify(text)} === null
+        ? nodes[0]
+        : nodes.find(node =>
+            (node.textContent ?? '').trim() === ${JSON.stringify(text)} ||
+            node.getAttribute('aria-label') === ${JSON.stringify(text)})
+      target?.scrollIntoView({ block: 'center', inline: 'center' })
+    })()`)
+    await new Promise(resolve => setTimeout(resolve, 120))
+  }
+
   const mouse = async (type, x, y, extra = {}) => {
     await session('Input.dispatchMouseEvent', {
       type,
@@ -206,6 +221,7 @@ export const launch = async ({ port = 9333 } = {}) => {
   }
 
   const click = async (selector, text = null) => {
+    await scrollInto(selector, text)
     const target = await box(selector, text)
     if (!target) {
       throw new Error(
@@ -219,18 +235,96 @@ export const launch = async ({ port = 9333 } = {}) => {
     return target
   }
 
-  const hover = async (selector, text = null) => {
+  const hold = async (selector, text = null, durationMs = 350) => {
+    await scrollInto(selector, text)
     const target = await box(selector, text)
     if (!target) {
-      throw new Error(`no element ${selector} to hover`)
+      throw new Error(
+        `no element ${selector} with text ${JSON.stringify(text)}`,
+      )
     }
     await mouse('mouseMoved', target.x, target.y)
+    await mouse('mousePressed', target.x, target.y, { buttons: 1 })
+    await new Promise(resolve => setTimeout(resolve, durationMs))
+    await mouse('mouseReleased', target.x, target.y, { buttons: 0 })
+    await new Promise(resolve => setTimeout(resolve, 250))
     return target
   }
 
   const move = async (x, y) => {
     await mouse('mouseMoved', x, y)
     await new Promise(resolve => setTimeout(resolve, 150))
+  }
+
+  /** Press on one point, move across the page in steps, release on another.
+   *  The intermediate moves are what let a pointerenter handler see the
+   *  cells between the ends. */
+  const drag = async (from, to) => {
+    await mouse('mouseMoved', from.x, from.y)
+    await mouse('mousePressed', from.x, from.y, { buttons: 1 })
+
+    const steps = 6
+    for (let step = 1; step <= steps; step += 1) {
+      await mouse(
+        'mouseMoved',
+        from.x + ((to.x - from.x) * step) / steps,
+        from.y + ((to.y - from.y) * step) / steps,
+        { button: 'left', buttons: 1 },
+      )
+      await new Promise(resolve => setTimeout(resolve, 30))
+    }
+
+    await mouse('mouseReleased', to.x, to.y, { buttons: 0 })
+    await new Promise(resolve => setTimeout(resolve, 250))
+  }
+
+  /** Press and hold a touch point, so the app's long-press can take over.
+   *  The caller drives the move and the release. */
+  const touchPress = async (from, hold = 350) => {
+    await session('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [
+        { x: from.x, y: from.y, id: 1, radiusX: 1, radiusY: 1, force: 1 },
+      ],
+    })
+    await new Promise(resolve => setTimeout(resolve, hold))
+  }
+
+  /** Move the held touch point in steps, then release. Each step lets the
+   *  app's pointermove handler see the cell under the finger. */
+  const touchDrag = async (from, to) => {
+    const steps = 6
+    for (let step = 1; step <= steps; step += 1) {
+      await session('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [
+          {
+            x: from.x + ((to.x - from.x) * step) / steps,
+            y: from.y + ((to.y - from.y) * step) / steps,
+            id: 1,
+            radiusX: 1,
+            radiusY: 1,
+            force: 1,
+          },
+        ],
+      })
+      await new Promise(resolve => setTimeout(resolve, 30))
+    }
+
+    await session('Input.dispatchTouchEvent', {
+      type: 'touchEnd',
+      touchPoints: [],
+    })
+    await new Promise(resolve => setTimeout(resolve, 250))
+  }
+
+  /** Release a held touch point without moving it. */
+  const touchRelease = async () => {
+    await session('Input.dispatchTouchEvent', {
+      type: 'touchEnd',
+      touchPoints: [],
+    })
+    await new Promise(resolve => setTimeout(resolve, 250))
   }
 
   const press = async (key, code, windowsVirtualKeyCode) => {
@@ -252,6 +346,26 @@ export const launch = async ({ port = 9333 } = {}) => {
   }
 
   const escape = () => press('Escape', 'Escape', 27)
+
+  const fill = async (selector, value) => {
+    await scrollInto(selector)
+    const target = await box(selector)
+    if (!target) {
+      throw new Error(`no input ${selector}`)
+    }
+    await mouse('mouseMoved', target.x, target.y)
+    await mouse('mousePressed', target.x, target.y, { buttons: 1 })
+    await mouse('mouseReleased', target.x, target.y, { buttons: 0 })
+    await evaluate(`(() => {
+      const el = document.querySelector(${JSON.stringify(selector)})
+      if (!el) return
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      setter?.call(el, '')
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    })()`)
+    await session('Input.insertText', { text: value })
+    await new Promise(resolve => setTimeout(resolve, 150))
+  }
 
   const screenshot = async path => {
     const shot = await session('Page.captureScreenshot', { format: 'png' })
@@ -330,10 +444,15 @@ export const launch = async ({ port = 9333 } = {}) => {
     goto,
     box,
     click,
-    hover,
+    hold,
     move,
+    drag,
+    touchPress,
+    touchDrag,
+    touchRelease,
     press,
     escape,
+    fill,
     screenshot,
     viewport,
     consoleMessages,

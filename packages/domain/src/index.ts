@@ -1,18 +1,24 @@
 export {
-  type DateKey,
-  type DateParts,
-  dateKeyFromParts,
-  dateKeyFromMillis,
-  dateKeyOrder,
+  type PlainDate,
+  PlainDateSchema,
+  addDays,
+  dateFromDayNumber,
   datesBetween,
+  dayNumber,
   dayOfMonthLabel,
-  formatDayNumber,
+  daysBetween,
+  formatPlainDate,
+  fullDateLabel,
   monthDayLabel,
-  parseDayNumber,
-  partsFromDateKey,
-  shiftDateKey,
+  monthNameLabel,
+  monthWeeks,
+  monthYearLabel,
+  parsePlainDate,
+  plainDateOrder,
+  sameDay,
+  todayPlainDate,
   weekdayLabel,
-} from './date'
+} from './date.ts'
 
 export {
   type DayLog,
@@ -33,7 +39,7 @@ export {
   periodDayCount,
   periodsFrom,
   periodsSorted,
-} from './period'
+} from './period.ts'
 
 export {
   type Confidence,
@@ -50,4 +56,12 @@ export {
   median,
   stateFor,
   withoutLikelySkips,
-} from './predict'
+} from './predict.ts'
+
+export {
+  cycleDayAt,
+  cycleGaps,
+  flowAt,
+  latestPeriodAt,
+  presentGaps,
+} from './plain.ts'

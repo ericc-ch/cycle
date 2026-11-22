@@ -5,6 +5,7 @@
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "moduleResolution": "bundler",
     "moduleDetection": "force",
+    "jsx": "react-jsx",
     "strict": true,
     "allowJs": true,
     "exactOptionalPropertyTypes": true,
@@ -20,13 +21,15 @@
     "noEmit": true,
     "types": ["node"],
     "paths": {
-      "@cycle/domain": ["./packages/domain/src/index.ts"]
+      "@cycle/domain": ["./packages/domain/src/index.ts"],
+      "@cycle/sync": ["./packages/sync/src/index.ts"]
     }
   },
   "include": [
+    "alchemy.run.ts",
     "apps/**/*.ts",
+    "apps/**/*.tsx",
     "packages/**/*.ts",
-    "vitest-setup.ts",
     "vitest.config.ts"
   ]
 }

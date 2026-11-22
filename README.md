@@ -2,25 +2,27 @@
 
 A private, local-only period tracker. One user, one phone, no account, no network.
 
-The point is not to predict better than the big apps. The point is to be honest about the range, keep the data on the device, and make logging cost two taps.
+The point is not to predict better than the big apps. The point is to be honest about the range, keep the data on the device, and make logging deliberate.
 
-Built on [Foldkit](https://foldkit.dev) (Elm architecture) and Effect.
+Built with React 19, Tailwind v4 and shadcn/ui. State is an Effect Atom; the domain package uses Effect internally and exposes plain-value helpers; haptics come from `web-haptics`.
 
 ## Run it
 
 ```bash
-nub install
-nub run dev      # http://localhost:5173
-nub run check    # typecheck, tests, lint, build
+pnpm install
+pnpm run dev      # http://localhost:5173
+pnpm run check    # typecheck, tests, lint, build
 ```
+
+`pnpm run dev` binds `0.0.0.0` with `allowedHosts: true`, so a phone can open it over the local network or over Tailscale: `http://<LAN-IP>:5173/` or `http://<tailnet-name>:5173/`.
 
 ## What it does
 
-- Three sections — Today, History, About — sit in a bar at the bottom of a phone screen, where a thumb reaches them. On a wide window the same row moves back under the heading.
-- Tap any day in the month calendar and say what it was: bleeding, or spotting. A logged day offers `Clear this day`.
-- Forgot a few days? Tap one end of the run, `Mark a range`, tap the other end, and one confirm writes every day between.
+- Three sections — Today, History, About — sit in a bar at the bottom of the screen, where a thumb reaches them, on every window size.
+- The calendar is read-only until you hold a day; there is no button for the mode. In that mode, tap days to paint them, or hold and drag a run. A painted day offers `Clear this day`. The mode card takes the status card's place at the same height, so the month never moves; it holds the pen, `Save` and `Cancel`. Nothing is written until `Save`; `Cancel` discards the draft.
+- Forgot a few days? Enter the mode, `Mark a range`, tap the other end, and `Save` writes every day between. On a phone, hold a day and drag instead.
 - Periods are derived from those days, not from a start/end form. A bleeding day starts a new period only after two clear days, and spotting never starts one.
-- The next period is shown as a date range, never a single date, with a confidence word.
+- Under the calendar, Today shows the current cycle day and the next period as a date range, never a single date, with a confidence word.
 - If the cycle runs past its range the app asks a question instead of showing a red day counter.
 - Everything is stored in `localStorage` on the device.
 
@@ -43,8 +45,8 @@ The shipped prior is deliberately wider than the dataset below (4 days for a col
 ## Scoring
 
 ```bash
-nub run dataset   # downloads the Marquette/Fehring cycle data into data/ (gitignored)
-nub run score
+pnpm run dataset   # downloads the Marquette/Fehring cycle data into data/ (gitignored)
+pnpm run score
 ```
 
 That is the same predictor the app uses, backtested on 1,490 real cycle-to-cycle pairs from 159 women. Each cycle is predicted from the cycles before it only.
@@ -60,7 +62,7 @@ app: median6 + prior + spread           1490     2.19     2.0   49.7%   69.4%   
 floor: oracle with her whole history    1506     1.82     1.0      —       —       —           —
 ```
 
-Three things worth taking from that table:
+Four things worth taking from that table:
 
 - Every sane method is within a tenth of a day of every other one. The algorithm is not where accuracy comes from after three cycles.
 - The oracle row is the ceiling: even a model that already knew each woman's full-history median would score 1.82 days, because the rest is the spread of her own cycles. The 0.37 day gap to the app is all that better maths could win.
@@ -92,20 +94,22 @@ Underneath, the interesting number is what happens while a cycle is open: at the
 ## Layout
 
 ```
-apps/web/                  the Vite app: runtime boot, Model/Message/update/view
-apps/web/src/theme.css     design tokens: light-dark() colours, fonts, base styles
-apps/web/src/components/ui styled @foldkit/ui components, owned by the app
-packages/domain/           date keys, period grouping, predictor, scoring
+apps/web/                    the Vite app: React shell, atoms, views
+apps/web/src/styles.css      design tokens: light-dark() colours, fonts, base styles
+apps/web/src/state.ts        Model, Action, pure reducer, Effect atoms, localStorage
+apps/web/src/app.tsx         App (atom wiring) and AppShell
+apps/web/src/components/ui   shadcn-style components owned by the app
+packages/domain/             dates, period grouping, predictor, scoring
 ```
 
-`packages/domain` has no Foldkit or DOM dependency, so the scoring CLI and the app run the exact same estimator.
+`packages/domain` has no React or DOM dependency, so the scoring CLI and the app run the exact same estimator.
 
 ## The look
 
-Monochrome and typographic, borrowed from [my site](https://github.com/ericc-ch/ericc-ch.github.io) (`docs/DESIGN.md`): `light-dark()` tokens, Plus Jakarta Sans with JetBrains Mono for dates, a fluid type ladder, a 4px grid, a 50ch measure, no radius, no shadow, no motion.
+Monochrome and typographic, borrowed from [my site](https://ericc.ch/DESIGN.md): `light-dark()` tokens, Plus Jakarta Sans with JetBrains Mono for dates, a fluid type ladder, a 4px grid, a 50ch measure, no radius, no shadow, no motion.
 
-The mono face is loaded and its token (`font.mono`) is still there, but every surface currently uses Plus Jakarta Sans. Switch a style over when dates or code should get the second face back.
+The mono face is loaded and its token is still there, but every surface currently uses Plus Jakarta Sans. Switch a class over when dates or code should get the second face back.
 
 There is no accent colour. Flow is encoded in ink: spotting is a hairline, bleeding is a full-ink bar. State lives in text, never in colour alone.
 
-Behaviour comes from [@foldkit/ui](https://foldkit.dev/ui/overview): the ARIA roles, keyboard handling, focus management and submodel state are the library's. The styled wrappers in `apps/web/src/components/ui` only supply the markup and the StyleX styles each component renders through its `toView` hook.
+Behaviour comes from [React Aria](https://react-spectrum.adobe.com/react-aria/) through shadcn's copy-owned components (`aria-nova`): ARIA roles, keyboard handling, focus management, overlays and the calendar grid. The files in `apps/web/src/components/ui` supply the markup and the Tailwind classes. Dates are `PlainDate` values (`CalendarDate`), a day with no time and no zone, rather than local `Date` objects.

@@ -26,33 +26,24 @@ try {
   )
   check('renders main', rendered)
 
-  const dialogs = await browser.evaluate(`(() => {
-    return [...document.querySelectorAll('dialog')].map(dialog => {
-      const style = getComputedStyle(dialog)
-      const rect = dialog.getBoundingClientRect()
-      return {
-        id: dialog.id,
-        open: dialog.open,
-        display: style.display,
-        area: rect.width * rect.height,
-      }
-    })
-  })()`)
+  const mountedDialogs = await browser.evaluate(
+    `document.querySelectorAll('[data-slot="dialog-content"], [data-slot="alert-dialog-content"]').length + document.querySelectorAll('[data-slot="dialog-overlay"], [data-slot="alert-dialog-overlay"]').length`,
+  )
+  check(
+    'no dialog is mounted at rest',
+    mountedDialogs === 0,
+    `${mountedDialogs} node(s)`,
+  )
 
-  for (const dialog of dialogs) {
-    if (dialog.open) continue
-    check(
-      `closed dialog ${dialog.id} is hidden`,
-      dialog.display === 'none' && dialog.area === 0,
-      `display=${dialog.display} area=${Math.round(dialog.area)}`,
-    )
-  }
+  // The flow options live inside the explicit edit mode. Holding today's cell
+  // enters it without writing anything until Save, so the doctor stays read-only.
+  await browser.hold('[data-slot="calendar-day"][data-today]')
 
   const controls = [
-    ['Today tab', '[data-slot="tabs-trigger"]', 'Today'],
+    ['Calendar tab', '[data-slot="tabs-trigger"]', 'Calendar'],
     ['History tab', '[data-slot="tabs-trigger"]', 'History'],
-    ['calendar day', '[data-slot="calendar-cell"][data-today] button'],
-    ['flow option', '[role="radio"]', 'Bleeding'],
+    ['calendar day', '[data-slot="calendar-day"][data-today]'],
+    ['flow option', '[data-slot="radio-group-item"]', 'Bleeding'],
   ]
 
   for (const [label, selector, text] of controls) {

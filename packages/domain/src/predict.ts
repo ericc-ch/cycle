@@ -1,37 +1,81 @@
 import { Array, Option, Order, Schema, pipe } from 'effect'
-import { defineTaggedUnion } from 'foldkit/schema'
 
-import { type DateKey, formatDayNumber, parseDayNumber } from './date'
-import { type Period, cycleLengths, latestPeriod } from './period'
+import {
+  type PlainDate,
+  PlainDateSchema,
+  dateFromDayNumber,
+  dayNumber,
+} from './date.ts'
+import { type Period, cycleLengths, latestPeriod } from './period.ts'
 
 export const Confidence = Schema.Literals(['Rough', 'Fair', 'Good'])
 export type Confidence = typeof Confidence.Type
 
 export const Window = Schema.Struct({
-  low: Schema.String,
-  high: Schema.String,
-  mostLikely: Schema.String,
+  low: PlainDateSchema,
+  high: PlainDateSchema,
+  mostLikely: PlainDateSchema,
 })
 export type Window = typeof Window.Type
 
-export const CycleState = defineTaggedUnion({
-  NoCycles: {},
-  Expected: {
-    window: Window,
-    daysUntil: Schema.Number,
-    confidence: Confidence,
+export type NoCycles = { readonly _tag: 'NoCycles' }
+
+export type Expected = {
+  readonly _tag: 'Expected'
+  readonly window: Window
+  readonly daysUntil: number
+  readonly confidence: Confidence
+}
+
+export type Late = {
+  readonly _tag: 'Late'
+  readonly window: Window
+  readonly daysLate: number
+  readonly confidence: Confidence
+}
+
+export type Overdue = {
+  readonly _tag: 'Overdue'
+  readonly daysLate: number
+  readonly confidence: Confidence
+}
+
+export type CycleState = NoCycles | Expected | Late | Overdue
+
+/** A plain tagged union. The app and the tests construct states by tag and
+ *  switch on `_tag`; nothing here needs a schema codec. */
+export const CycleState = {
+  NoCycles: (): NoCycles => ({ _tag: 'NoCycles' }),
+  Expected: (state: Omit<Expected, '_tag'>): Expected => ({
+    _tag: 'Expected',
+    ...state,
+  }),
+  Late: (state: Omit<Late, '_tag'>): Late => ({ _tag: 'Late', ...state }),
+  Overdue: (state: Omit<Overdue, '_tag'>): Overdue => ({
+    _tag: 'Overdue',
+    ...state,
+  }),
+  match: <A>(
+    state: CycleState,
+    cases: {
+      readonly NoCycles: (state: NoCycles) => A
+      readonly Expected: (state: Expected) => A
+      readonly Late: (state: Late) => A
+      readonly Overdue: (state: Overdue) => A
+    },
+  ): A => {
+    switch (state._tag) {
+      case 'NoCycles':
+        return cases.NoCycles(state)
+      case 'Expected':
+        return cases.Expected(state)
+      case 'Late':
+        return cases.Late(state)
+      case 'Overdue':
+        return cases.Overdue(state)
+    }
   },
-  Late: {
-    window: Window,
-    daysLate: Schema.Number,
-    confidence: Confidence,
-  },
-  Overdue: {
-    daysLate: Schema.Number,
-    confidence: Confidence,
-  },
-})
-export type CycleState = typeof CycleState.Type
+} as const
 
 export type PredictorOptions = {
   readonly populationMeanDays: number
@@ -164,6 +208,19 @@ export const median = (values: ReadonlyArray<number>): number => {
         2
 }
 
+const trimmedMean = (values: ReadonlyArray<number>): number => {
+  if (values.length <= 2) {
+    return mean(values)
+  }
+
+  const sorted = Array.sort(values, Order.Number)
+
+  return mean(sorted.slice(1, -1))
+}
+
+const robustCentre = (values: ReadonlyArray<number>): number =>
+  (median(values) + trimmedMean(values)) / 2
+
 const sampleSpread = (values: ReadonlyArray<number>): number => {
   if (values.length < 2) {
     return 0
@@ -236,7 +293,7 @@ const estimate = (
   const spread = Math.max(sampleSpread(recent), options.spreadFloorDays)
 
   return {
-    centreDays: median(recent),
+    centreDays: robustCentre(recent),
     spreadDays: spread * smallSampleInflation(recent.length),
   }
 }
@@ -276,68 +333,58 @@ const windowFromForecast = (
   forecasted: Forecast,
   startDay: number,
 ): Window => ({
-  low: formatDayNumber(startDay + forecasted.lowDay),
-  high: formatDayNumber(startDay + forecasted.highDay),
-  mostLikely: formatDayNumber(startDay + forecasted.likelyDay),
+  low: dateFromDayNumber(startDay + forecasted.lowDay),
+  high: dateFromDayNumber(startDay + forecasted.highDay),
+  mostLikely: dateFromDayNumber(startDay + forecasted.likelyDay),
 })
 
 export const stateFor = (
   periods: ReadonlyArray<Period>,
-  today: DateKey,
+  today: PlainDate,
   options: PredictorOptions = defaultPredictorOptions,
 ): CycleState => {
-  const maybeToday = parseDayNumber(today)
+  const maybeState = Option.flatMap(latestPeriod(periods), period => {
+    const lengths = cycleLengths(periods)
+    const elapsed = Math.max(1, dayNumber(today) - dayNumber(period.start))
 
-  const maybeState = Option.flatMap(latestPeriod(periods), period =>
-    Option.flatMap(maybeToday, todayNumber =>
-      Option.flatMap(parseDayNumber(period.start), startNumber => {
-        const lengths = cycleLengths(periods)
-        const elapsed = Math.max(1, todayNumber - startNumber)
+    return Option.map(forecast(lengths, elapsed, options), forecasted => {
+      const confidence = confidenceFor(forecasted.cyclesCounted)
+      const window = windowFromForecast(forecasted, dayNumber(period.start))
+      const usualDay = Math.round(forecasted.centreDays)
+      const usualHighDay = Math.ceil(
+        forecasted.centreDays + options.bandZ * forecasted.spreadDays,
+      )
 
-        return Option.map(forecast(lengths, elapsed, options), forecasted => {
-          const confidence = confidenceFor(forecasted.cyclesCounted)
-          const window = windowFromForecast(forecasted, startNumber)
-          const usualDay = Math.round(forecasted.centreDays)
-          const usualHighDay = Math.ceil(
-            forecasted.centreDays + options.bandZ * forecasted.spreadDays,
-          )
-
-          if (elapsed > usualHighDay) {
-            return CycleState.Overdue({
-              daysLate: elapsed - usualDay,
-              confidence,
-            })
-          }
-
-          if (elapsed > usualDay) {
-            return CycleState.Late({
-              window,
-              daysLate: elapsed - usualDay,
-              confidence,
-            })
-          }
-
-          return CycleState.Expected({
-            window,
-            daysUntil: usualDay - elapsed,
-            confidence,
-          })
+      if (elapsed > usualHighDay) {
+        return CycleState.Overdue({
+          daysLate: elapsed - usualDay,
+          confidence,
         })
-      }),
-    ),
-  )
+      }
+
+      if (elapsed > usualDay) {
+        return CycleState.Late({
+          window,
+          daysLate: elapsed - usualDay,
+          confidence,
+        })
+      }
+
+      return CycleState.Expected({
+        window,
+        daysUntil: usualDay - elapsed,
+        confidence,
+      })
+    })
+  })
 
   return Option.getOrElse(maybeState, () => CycleState.NoCycles())
 }
 
 export const cycleDayFor = (
   periods: ReadonlyArray<Period>,
-  today: DateKey,
+  today: PlainDate,
 ): Option.Option<number> =>
-  Option.flatMap(parseDayNumber(today), todayNumber =>
-    Option.flatMap(latestPeriod(periods), period =>
-      Option.map(parseDayNumber(period.start), startNumber =>
-        Math.max(1, todayNumber - startNumber + 1),
-      ),
-    ),
+  Option.map(latestPeriod(periods), period =>
+    Math.max(1, dayNumber(today) - dayNumber(period.start) + 1),
   )

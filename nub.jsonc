@@ -1,5 +1,0 @@
-{
-  "$schema": "https://nubjs.com/schema/latest.json",
-  "conditions": ["development"],
-  "verifyDeps": "error",
-}

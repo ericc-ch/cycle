@@ -17,7 +17,7 @@ if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
 fi
 
 : > "$LOG"
-setsid bash -c "cd '$ROOT/apps/web' && exec nub exec vite --host 127.0.0.1 --port '$PORT' --strictPort" \
+setsid bash -c "cd '$ROOT/apps/web' && exec pnpm exec vite --host 127.0.0.1 --port '$PORT' --strictPort" \
   >> "$LOG" 2>&1 &
 echo $! > "$PIDFILE"
 

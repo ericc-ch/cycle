@@ -3,42 +3,35 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
+  "packageManager": "pnpm@12.21.0",
   "scripts": {
-    "dev": "nub run --filter @cycle/web dev",
-    "build": "nub run --filter @cycle/web build",
-    "preview": "nub run --filter @cycle/web preview",
+    "dev": "pnpm --filter @cycle/web dev",
+    "dev:api": "alchemy dev --stage local",
+    "plan": "alchemy plan --stage prod",
+    "deploy": "alchemy deploy --stage prod",
+    "destroy": "alchemy destroy --stage prod",
+    "build": "pnpm --filter @cycle/web build",
+    "preview": "pnpm --filter @cycle/web preview",
     "typecheck": "tsc --noEmit",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "test": "vitest run",
     "lint": "oxlint apps packages && effect-tsgo patch --no-typescript --oxlint && oxlint --config .oxlintrc.effect.json --deny-warnings apps packages",
-    "check": "nub run typecheck && nub run test && nub run lint && nub run build",
-    "score": "nub packages/domain/src/scoring/score.ts",
-    "dataset": "nub packages/domain/scripts/fetch-dataset.ts"
+    "check": "pnpm run typecheck && pnpm run test && pnpm run lint && pnpm run build",
+    "score": "node packages/domain/src/scoring/score.ts",
+    "dataset": "node packages/domain/scripts/fetch-dataset.ts"
   },
   "devDependencies": {
+    "@alchemy.run/cloudflare": "2.0.0-beta.85",
     "@effect/tsgo": "0.50.0",
-    "@foldkit/oxlint-plugin": "0.15.4",
-    "@stylexjs/unplugin": "^0.19.0",
     "@types/node": "^24.10.1",
-    "effect": "4.1.0",
-    "foldkit": "0.170.0",
+    "alchemy": "2.0.0-beta.85",
+    "effect": "4.1.2",
     "happy-dom": "^20.14.5",
     "oxfmt": "^0.66.0",
     "oxlint": "1.85.0",
     "oxlint-tsgolint": "7.0.2003",
     "typescript": "^7.0.2",
     "vitest": "^5.0.2"
-  },
-  "devEngines": {
-    "packageManager": {
-      "name": "nub",
-      "version": "^0.9.7",
-      "onFail": "ignore"
-    }
   }
 }

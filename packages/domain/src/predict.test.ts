@@ -1,6 +1,7 @@
 import { Option } from 'effect'
 import { describe, expect, test } from 'vitest'
 
+import { parsePlainDate } from './date'
 import { type DayLog, periodsFrom } from './period'
 import {
   type CycleState,
@@ -15,8 +16,18 @@ import {
   withoutLikelySkips,
 } from './predict'
 
-const log = (date: string, flow: DayLog['flow'] = 'Bleeding'): DayLog => ({
-  date,
+const date = (value: string) => {
+  const parsed = parsePlainDate(value)
+
+  if (parsed === null) {
+    throw new Error(`not a date: ${value}`)
+  }
+
+  return parsed
+}
+
+const log = (value: string, flow: DayLog['flow'] = 'Bleeding'): DayLog => ({
+  date: date(value),
   flow,
 })
 
@@ -81,7 +92,7 @@ describe('forecast', () => {
   test('a gap that looks like a missed log is left out of the estimate', () => {
     const forecasted = Option.getOrThrow(forecast([28, 29, 30, 28, 29, 60], 0))
 
-    expect(forecasted.centreDays).toBe(29)
+    expect(forecasted.likelyDay).toBe(29)
     expect(forecasted.spreadDays).toBe(defaultPredictorOptions.spreadFloorDays)
     expect(forecasted.cyclesCounted).toBe(5)
   })
@@ -118,19 +129,19 @@ describe('stateFor', () => {
   const periods = periodsFor(['2026-09-05', '2026-10-03'])
 
   test('no periods means no cycle state', () => {
-    expect(tagOf(stateFor([], '2026-10-20'))).toBe('NoCycles')
+    expect(tagOf(stateFor([], date('2026-10-20')))).toBe('NoCycles')
   })
 
   test('before the usual day the state is expected', () => {
-    const state = stateFor(periods, '2026-10-20')
+    const state = stateFor(periods, date('2026-10-20'))
 
     expect(tagOf(state)).toBe('Expected')
     expect(state).toStrictEqual(
       CycleStateSchema.Expected({
         window: {
-          low: '2026-10-26',
-          high: '2026-11-06',
-          mostLikely: '2026-11-01',
+          low: date('2026-10-26'),
+          high: date('2026-11-06'),
+          mostLikely: date('2026-11-01'),
         },
         daysUntil: 12,
         confidence: 'Rough',
@@ -139,14 +150,14 @@ describe('stateFor', () => {
   })
 
   test('past the usual day but inside the window the state is late', () => {
-    const state = stateFor(periods, '2026-11-02')
+    const state = stateFor(periods, date('2026-11-02'))
 
     expect(tagOf(state)).toBe('Late')
     expect(state).toMatchObject({ daysLate: 1 })
   })
 
   test('past the whole window the state is overdue', () => {
-    const state = stateFor(periods, '2026-11-15')
+    const state = stateFor(periods, date('2026-11-15'))
 
     expect(tagOf(state)).toBe('Overdue')
     expect(state).toMatchObject({ daysLate: 14 })
@@ -160,7 +171,7 @@ describe('stateFor', () => {
       '2026-09-14',
     ])
 
-    expect(tagOf(stateFor(missed, '2026-09-20'))).toBe('Expected')
+    expect(tagOf(stateFor(missed, date('2026-09-20')))).toBe('Expected')
   })
 })
 
@@ -208,11 +219,15 @@ describe('cycleDayFor', () => {
   test('counts from the latest period start', () => {
     const periods = periodsFor(['2026-09-05', '2026-10-03'])
 
-    expect(cycleDayFor(periods, '2026-10-03')).toStrictEqual(Option.some(1))
-    expect(cycleDayFor(periods, '2026-10-20')).toStrictEqual(Option.some(18))
+    expect(cycleDayFor(periods, date('2026-10-03'))).toStrictEqual(
+      Option.some(1),
+    )
+    expect(cycleDayFor(periods, date('2026-10-20'))).toStrictEqual(
+      Option.some(18),
+    )
   })
 
   test('is empty without periods', () => {
-    expect(cycleDayFor([], '2026-10-20')).toStrictEqual(Option.none())
+    expect(cycleDayFor([], date('2026-10-20'))).toStrictEqual(Option.none())
   })
 })

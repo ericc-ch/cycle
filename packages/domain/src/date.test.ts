@@ -1,126 +1,119 @@
-import { Option } from 'effect'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 
 import {
-  dateKeyFromMillis,
-  dateKeyFromParts,
+  addDays,
+  dateFromDayNumber,
   datesBetween,
+  dayNumber,
   dayOfMonthLabel,
-  formatDayNumber,
-  parseDayNumber,
-  partsFromDateKey,
-  shiftDateKey,
+  daysBetween,
+  formatPlainDate,
+  monthDayLabel,
+  parsePlainDate,
+  sameDay,
+  todayPlainDate,
   weekdayLabel,
 } from './date'
 
-describe('parseDayNumber', () => {
-  test('parses a real date to a whole day number', () => {
-    const dayNumber = Option.getOrThrow(parseDayNumber('2026-11-02'))
+const date = (value: string) => {
+  const parsed = parsePlainDate(value)
 
-    expect(Number.isInteger(dayNumber)).toBe(true)
-    expect(formatDayNumber(dayNumber)).toBe('2026-11-02')
+  if (parsed === null) {
+    throw new Error(`not a date: ${value}`)
+  }
+
+  return parsed
+}
+
+describe('parsePlainDate', () => {
+  test('reads a real date and writes it back unchanged', () => {
+    expect(formatPlainDate(date('2026-11-02'))).toBe('2026-11-02')
   })
 
   test('rejects dates that do not exist', () => {
-    expect(parseDayNumber('2026-02-31')).toStrictEqual(Option.none())
-    expect(parseDayNumber('2026-13-01')).toStrictEqual(Option.none())
+    expect(parsePlainDate('2026-02-31')).toBeNull()
+    expect(parsePlainDate('2026-13-01')).toBeNull()
   })
 
   test('rejects anything that is not zero padded', () => {
-    expect(parseDayNumber('2026-2-3')).toStrictEqual(Option.none())
-    expect(parseDayNumber('')).toStrictEqual(Option.none())
-    expect(parseDayNumber('today')).toStrictEqual(Option.none())
+    expect(parsePlainDate('2026-2-3')).toBeNull()
+    expect(parsePlainDate('')).toBeNull()
+    expect(parsePlainDate('today')).toBeNull()
+    expect(parsePlainDate('2026-11-10T00:00')).toBeNull()
   })
 })
 
 describe('day arithmetic', () => {
-  test('crosses a month boundary', () => {
-    expect(shiftDateKey('2026-10-31', 1)).toStrictEqual(
-      Option.some('2026-11-01'),
-    )
+  test('adds a day across a month boundary', () => {
+    expect(formatPlainDate(addDays(date('2026-10-31'), 1))).toBe('2026-11-01')
   })
 
-  test('crosses a year boundary backwards', () => {
-    expect(shiftDateKey('2026-01-01', -1)).toStrictEqual(
-      Option.some('2025-12-31'),
-    )
+  test('subtracts a day across a year boundary', () => {
+    expect(formatPlainDate(addDays(date('2026-01-01'), -1))).toBe('2025-12-31')
   })
 
   test('counts a leap day', () => {
-    expect(shiftDateKey('2028-02-28', 1)).toStrictEqual(
-      Option.some('2028-02-29'),
-    )
+    expect(formatPlainDate(addDays(date('2028-02-28'), 1))).toBe('2028-02-29')
+  })
+
+  test('a day number round trips through the epoch', () => {
+    expect(
+      formatPlainDate(dateFromDayNumber(dayNumber(date('2026-11-02')))),
+    ).toBe('2026-11-02')
+  })
+
+  test('two days apart is one', () => {
+    expect(daysBetween(date('2026-11-02'), date('2026-11-03'))).toBe(1)
+  })
+
+  test('the same day reads the same from two sources', () => {
+    expect(sameDay(date('2026-11-02'), date('2026-11-02'))).toBe(true)
+    expect(sameDay(date('2026-11-02'), date('2026-11-03'))).toBe(false)
   })
 })
 
 describe('labels', () => {
-  test('two November days are one and two days apart', () => {
-    const first = Option.getOrThrow(parseDayNumber('2026-11-02'))
-    const second = Option.getOrThrow(parseDayNumber('2026-11-03'))
+  test('names a November day', () => {
+    const day = date('2026-11-02')
 
-    expect(second - first).toBe(1)
-    expect(weekdayLabel(first)).toBe('Mon')
-    expect(dayOfMonthLabel(first)).toBe('2')
+    expect(weekdayLabel(day)).toBe('Mon')
+    expect(dayOfMonthLabel(day)).toBe('2')
+    expect(monthDayLabel(day)).toBe('2 Nov')
   })
 
-  test('builds a local date key from a timestamp', () => {
-    const millis = Date.UTC(2026, 10, 2, 12, 0, 0)
+  test("today comes from the local calendar, not UTC's", () => {
+    vi.useFakeTimers({ now: new Date(2026, 10, 2, 23, 30) })
 
-    expect(dateKeyFromMillis(millis)).toMatch(/^2026-11-0[12]$/)
-  })
-})
+    expect(formatPlainDate(todayPlainDate())).toBe('2026-11-02')
 
-describe('parts', () => {
-  test('splits a date key for a calendar', () => {
-    expect(partsFromDateKey('2026-10-06')).toStrictEqual(
-      Option.some({ year: 2026, month: 10, day: 6 }),
-    )
-  })
-
-  test('rejects a key that is not a real date', () => {
-    expect(partsFromDateKey('2026-02-30')).toStrictEqual(Option.none())
-    expect(partsFromDateKey('06/10/2026')).toStrictEqual(Option.none())
-  })
-
-  test('pads the month and day back into a key', () => {
-    expect(dateKeyFromParts({ year: 2026, month: 1, day: 5 })).toBe(
-      '2026-01-05',
-    )
+    vi.useRealTimers()
   })
 })
 
 describe('datesBetween', () => {
   test('lists both ends and every day inside', () => {
-    expect(datesBetween('2026-10-17', '2026-10-20')).toStrictEqual([
-      '2026-10-17',
-      '2026-10-18',
-      '2026-10-19',
-      '2026-10-20',
-    ])
+    expect(
+      datesBetween(date('2026-10-17'), date('2026-10-20')).map(formatPlainDate),
+    ).toStrictEqual(['2026-10-17', '2026-10-18', '2026-10-19', '2026-10-20'])
   })
 
   test('reads the same either way round', () => {
-    expect(datesBetween('2026-10-20', '2026-10-17')).toStrictEqual(
-      datesBetween('2026-10-17', '2026-10-20'),
+    expect(
+      datesBetween(date('2026-10-20'), date('2026-10-17')).map(formatPlainDate),
+    ).toStrictEqual(
+      datesBetween(date('2026-10-17'), date('2026-10-20')).map(formatPlainDate),
     )
   })
 
   test('a single day is one entry', () => {
-    expect(datesBetween('2026-10-20', '2026-10-20')).toStrictEqual([
-      '2026-10-20',
-    ])
+    expect(
+      datesBetween(date('2026-10-20'), date('2026-10-20')).map(formatPlainDate),
+    ).toStrictEqual(['2026-10-20'])
   })
 
   test('crosses a month boundary', () => {
-    expect(datesBetween('2026-10-30', '2026-11-02')).toStrictEqual([
-      '2026-10-30',
-      '2026-10-31',
-      '2026-11-01',
-      '2026-11-02',
-    ])
-  })
-
-  test('gives nothing for a key that is not a date', () => {
-    expect(datesBetween('2026-02-30', '2026-03-02')).toStrictEqual([])
+    expect(
+      datesBetween(date('2026-10-30'), date('2026-11-02')).map(formatPlainDate),
+    ).toStrictEqual(['2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02'])
   })
 })

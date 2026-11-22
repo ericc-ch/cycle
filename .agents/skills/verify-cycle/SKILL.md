@@ -5,7 +5,7 @@ description: Drive the cycle app in a real browser to verify user paths the unit
 
 # Verify cycle
 
-`cycle` is a Foldkit single-page app. `nub run test` covers update logic and view text with `foldkit/scene` in happy-dom, but it cannot see layout, stacking, or real event delivery. The failure that motivated this skill: closed `<dialog>` elements were rendered with `display: grid`, which overrode the UA `dialog:not([open]) { display: none }` and left two full-screen sheets swallowing every click. Every unit test passed.
+`cycle` is a React single-page app. `pnpm run test` covers the reducer and rendered text with Testing Library in happy-dom, but it cannot see layout, stacking, or real event delivery. The failure that motivated this skill: an overlay stayed mounted over the page and swallowed every click, while every unit test passed.
 
 Drive the app with headless Chrome over the DevTools Protocol. There is no Playwright dependency; `scripts/cdp.mjs` is a ~180 line client.
 
@@ -44,7 +44,7 @@ node .agents/skills/verify-cycle/scripts/doctor.mjs
 Read-only. It fails with reasons when:
 
 - the server is unreachable or the page has no `<main>`
-- a closed `dialog` is not `display: none` (the regression above)
+- a dialog is mounted while nothing is open (the app mounts dialog content only while it is open, so any `[data-slot="dialog-content"]` at rest is a leak)
 - the center of a top-level control is covered by something else
 - the page logged an exception
 
@@ -59,19 +59,19 @@ node .agents/skills/verify-cycle/scripts/drive.mjs clicks     # one flow
 
 Flows live in `scripts/drive.mjs` and map to `features/*.md`:
 
-| Flow       | What it proves                                                                                        |
-| ---------- | ----------------------------------------------------------------------------------------------------- |
-| `clicks`   | every visible control receives its own click; no overlay steals input                                 |
-| `flow`     | pick a day, log bleeding, survives reload, clear it; then a four-day range in one confirm             |
-| `tabs`     | Today/History/About switch panels; the prediction switch reaches the status                           |
-| `overlays` | About opens the explainer and clear dialogs and Escape closes them; legend and tooltip open and close |
-| `mobile`   | at 390x844 the bar is fixed to the bottom, every tab is 44px, nothing scrolls sideways                |
+| Flow       | What it proves                                                                                                   |
+| ---------- | ---------------------------------------------------------------------------------------------------------------- |
+| `clicks`   | every visible control receives its own click; no overlay steals input                                            |
+| `flow`     | hold a day to open the mode, paint a day, save, survive reload, clear it; then a four-day range and a drag, each saved once    |
+| `tabs`     | Today/History/About switch panels; the prediction switch toggles and resets on reload                            |
+| `overlays` | About opens the explainer and clear dialogs and Escape closes them; the legend opens and closes                  |
+| `mobile`   | at 390x844 the bar is fixed to the bottom, every tab is 44px, nothing scrolls sideways                           |
 
 Each run prints a line per check and exits non-zero on the first failed flow. Screenshots and `report.json` land in `.audit/evidence/<run-id>/`.
 
-Selectors are stable handles, not coordinates: `[data-slot="tabs-trigger"]`, `[data-slot="calendar-day"]` for day cells (the cell wrapper carries `data-today`), `[role="radio"]`, `[data-slot="button"]` with its text, `[data-slot="dialog-content"]`, `[role="status"]`.
+Selectors are stable handles, not coordinates: `[data-slot="tabs-trigger"]`, `[data-slot="calendar-day"]` for day cells, `[data-slot="radio-group-item"]`, `[data-slot="button"]` with its text, `[data-slot="dialog-content"]`, `[data-slot="edit-banner"]`. Day cells carry `data-date` (`YYYY-MM-DD`), which is the stable key: React Aria folds the selected and disabled state into each cell's `aria-label`.
 
-Hover and keyboard are real input events (`Input.dispatchMouseEvent`, `Input.dispatchKeyEvent`), not `element.click()`, so pointer and Escape paths are exercised.
+Pointer and keyboard are real input events (`Input.dispatchMouseEvent`, `Input.dispatchKeyEvent`), not `element.click()`, so the drag and Escape paths are exercised.
 
 Screens are emulated with `browser.viewport({ width, height, mobile })`, which sends `Emulation.setDeviceMetricsOverride` and toggles touch. Chrome's headless default is 1280x800, so anything that should only happen on a phone needs the override.
 
@@ -104,6 +104,6 @@ If Chrome wedges, `drive.mjs` always closes its target in a `finally` block. Its
 
 ## Boundaries
 
-- This drives the web app only. The scoring CLI (`nub run score`) has its own tests.
+- This drives the web app only. The scoring CLI (`pnpm run score`) has its own tests.
 - It does not test accessibility conformance, only the behaviour a keyboard and pointer path can observe.
 - It does not mock the network: `cycle` makes none, so a request in the log is a real defect.

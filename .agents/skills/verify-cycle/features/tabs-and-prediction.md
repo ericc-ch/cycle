@@ -9,9 +9,9 @@ deterministic
 - `Today`, `History`, `About` switch the panel and mark the active tab.
 - History lists period rows when there are logs.
 - A gap over 1.6× her usual cycle is labelled under its row as a probable missed log, and the estimate skips it.
-- About renders the prediction switch in the `on` state.
-- Toggling the switch writes `off`, and Today reports `Prediction is off.`
-- Prediction returns to `on` after a reload (it is in-memory, not persisted).
+- About renders the prediction switch in the `on` state, next to the word `on`.
+- Toggling the switch turns it off, persists to `localStorage`, updates the About label to `off`, and Today reports `Prediction is off.`
+- Prediction stays `off` after a reload.
 
 ## How to get to it (user POV)
 
@@ -24,18 +24,18 @@ The three words in the bar at the bottom of a phone screen, or the row under `cy
 node .agents/skills/verify-cycle/scripts/drive.mjs tabs
 ```
 
-Click `[data-slot="tabs-trigger"]` by text. The active tab carries `data-state="active"`. The switch carries `data-slot="switch"` and `data-state`; click it and read the attribute. After switching to Today, read `[role="status"]`.
+Click `[data-slot="tabs-trigger"]` by text. The active tab carries `data-selected="true"` and `aria-selected`. The switch carries `[data-slot="switch"]` and `data-selected`; click it and read the attribute.
 
 The missed-log case seeds four 30 day cycles and then a 51 day gap, switches to History and expects the sentence `Probably a period you did not log` under exactly one row.
 
 ## Gotchas
 
-- The tab panel renders only the active tab (`PanelMount.ActiveOnly`), so a selector scoped to another tab's content will find nothing rather than hidden content.
-- Clicking a tab dispatches a `FocusTab` command before the app folds the selection. In a scene test that command has to be resolved; in the browser it is not observable.
+- React Aria mounts only the active tab's panel, so a selector scoped to another tab finds nothing rather than hidden content.
+- Clicking a tab updates the app's `tab` through `onValueChange`; there is no separate focus command to resolve.
 - On a phone the bar is `position: fixed`; its height and pinned position are asserted by the `mobile` flow, not here.
-- `isPredicting` is not stored. A reload resets it, so an assertion that it is still `off` is a bug in the test, not the app.
+- `isPredicting` is stored under `cycle.predicting` in `localStorage`, so a reload preserves it.
 - History with no logs shows `Nothing logged yet.`; assert `Periods` only after logging a day.
 
 ## Promotion Criteria
 
-An e2e spec that walks all three tabs, asserts `aria-selected`/`data-state`, toggles the switch, and asserts the Today status. Needs a seeded log for the History rows.
+An e2e spec that walks all three tabs, asserts `aria-selected`, and toggles the switch. Needs a seeded log for the History rows.

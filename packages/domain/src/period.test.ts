@@ -1,8 +1,10 @@
 import { Option } from 'effect'
 import { describe, expect, test } from 'vitest'
 
+import { formatPlainDate, parsePlainDate } from './date'
 import {
   type DayLog,
+  type Period,
   cycleLengths,
   cycleLengthsByPeriod,
   flowFromStored,
@@ -12,7 +14,27 @@ import {
   periodsFrom,
 } from './period'
 
-const log = (date: string, flow: DayLog['flow']): DayLog => ({ date, flow })
+const date = (value: string) => {
+  const parsed = parsePlainDate(value)
+
+  if (parsed === null) {
+    throw new Error(`not a date: ${value}`)
+  }
+
+  return parsed
+}
+
+const log = (value: string, flow: DayLog['flow']): DayLog => ({
+  date: date(value),
+  flow,
+})
+
+/** The same shape the storage boundary writes: dates as `YYYY-MM-DD`. */
+const iso = (periods: ReadonlyArray<Period>) =>
+  periods.map(period => ({
+    start: formatPlainDate(period.start),
+    end: formatPlainDate(period.end),
+  }))
 
 describe('periodsFrom', () => {
   test('groups consecutive bleeding days into one period', () => {
@@ -22,7 +44,9 @@ describe('periodsFrom', () => {
       log('2026-10-05', 'Bleeding'),
     ])
 
-    expect(periods).toStrictEqual([{ start: '2026-10-03', end: '2026-10-05' }])
+    expect(iso(periods)).toStrictEqual([
+      { start: '2026-10-03', end: '2026-10-05' },
+    ])
   })
 
   test('one clear day in the middle stays inside the same period', () => {
@@ -32,7 +56,9 @@ describe('periodsFrom', () => {
       log('2026-10-06', 'Bleeding'),
     ])
 
-    expect(periods).toStrictEqual([{ start: '2026-10-03', end: '2026-10-06' }])
+    expect(iso(periods)).toStrictEqual([
+      { start: '2026-10-03', end: '2026-10-06' },
+    ])
   })
 
   test('two clear days start a new period', () => {
@@ -41,7 +67,7 @@ describe('periodsFrom', () => {
       log('2026-10-06', 'Bleeding'),
     ])
 
-    expect(periods).toStrictEqual([
+    expect(iso(periods)).toStrictEqual([
       { start: '2026-10-03', end: '2026-10-03' },
       { start: '2026-10-06', end: '2026-10-06' },
     ])
@@ -57,7 +83,9 @@ describe('periodsFrom', () => {
       log('2026-10-03', 'Bleeding'),
     ])
 
-    expect(periods).toStrictEqual([{ start: '2026-10-03', end: '2026-10-03' }])
+    expect(iso(periods)).toStrictEqual([
+      { start: '2026-10-03', end: '2026-10-03' },
+    ])
   })
 
   test('spotting right after a period extends the end', () => {
@@ -67,7 +95,9 @@ describe('periodsFrom', () => {
       log('2026-10-05', 'Spotting'),
     ])
 
-    expect(periods).toStrictEqual([{ start: '2026-10-03', end: '2026-10-05' }])
+    expect(iso(periods)).toStrictEqual([
+      { start: '2026-10-03', end: '2026-10-05' },
+    ])
   })
 
   test('a spotting day two days later does not extend the period', () => {
@@ -76,17 +106,18 @@ describe('periodsFrom', () => {
       log('2026-10-05', 'Spotting'),
     ])
 
-    expect(periods).toStrictEqual([{ start: '2026-10-03', end: '2026-10-03' }])
+    expect(iso(periods)).toStrictEqual([
+      { start: '2026-10-03', end: '2026-10-03' },
+    ])
   })
 
-  test('ignores unreadable dates and sorts the rest', () => {
+  test('sorts the days by date before grouping them', () => {
     const periods = periodsFrom([
       log('2026-10-03', 'Bleeding'),
-      log('not a date', 'Bleeding'),
       log('2026-09-01', 'Bleeding'),
     ])
 
-    expect(periods).toStrictEqual([
+    expect(iso(periods)).toStrictEqual([
       { start: '2026-09-01', end: '2026-09-01' },
       { start: '2026-10-03', end: '2026-10-03' },
     ])
@@ -142,16 +173,18 @@ describe('helpers', () => {
       log('2026-09-05', 'Bleeding'),
     ])
 
-    expect(latestPeriod(periods)).toStrictEqual(
-      Option.some({ start: '2026-10-03', end: '2026-10-03' }),
-    )
+    expect(iso([Option.getOrThrow(latestPeriod(periods))])).toStrictEqual([
+      { start: '2026-10-03', end: '2026-10-03' },
+    ])
   })
 
   test('flowOn finds the flow for a day', () => {
     const logs = [log('2026-10-03', 'Bleeding')]
 
-    expect(flowOn(logs, '2026-10-03')).toStrictEqual(Option.some('Bleeding'))
-    expect(flowOn(logs, '2026-10-04')).toStrictEqual(Option.none())
+    expect(flowOn(logs, date('2026-10-03'))).toStrictEqual(
+      Option.some('Bleeding'),
+    )
+    expect(flowOn(logs, date('2026-10-04'))).toStrictEqual(Option.none())
   })
 
   test('only bleeding is bleeding', () => {

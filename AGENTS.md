@@ -1,80 +1,62 @@
 # Agent Development Notes
 
-This is a Foldkit app. Read [`FOLDKIT.md`](./FOLDKIT.md) before writing any code in this project. It covers the architecture, the APIs, and the conventions the project is built on.
-
-Foldkit owns `FOLDKIT.md` and replaces it whole on upgrade. This file is yours. Anything you want an agent to know about this project goes below, where an upgrade won't touch it.
-
-`FOLDKIT.md` reads the line below to decide whether it has already offered to vendor the Foldkit source. Leave it in place.
-
-subtree_prompted: true
-
 ## Project Notes
 
 `cycle` is a private, single-user period tracker. Local only: no account, no network permission, no analytics, no telemetry. Data lives in `localStorage` under `cycle.logs`.
 
 ### Package manager and checks
 
-Nub, not npm, for everything that runs: `nub run dev`, `nub run test`, `nub run score`. Installs go through `nub install`, which reads the tracked `package-lock.json`.
+pnpm, not npm, is the package manager (`pnpm install`, `pnpm run <script>`).
 
-After any change, run `nub run check` (typecheck, vitest, lint including the Effect rules, then one build).
+Run `pnpm run check` after any change. It typechecks, tests, lints and builds.
 
-For anything that touches layout, overlays or event delivery, also run the browser check. `foldkit/scene` runs in happy-dom and cannot see stacking or CSS, which is how a closed `<dialog>` with `display: grid` once covered the whole page:
-
-```sh
-.agents/skills/verify-cycle/scripts/serve.sh
-node .agents/skills/verify-cycle/scripts/doctor.mjs
-node .agents/skills/verify-cycle/scripts/drive.mjs
-.agents/skills/verify-cycle/scripts/stop.sh
-```
+Anything that touches layout, overlays or event delivery also needs a real browser. Run the `verify-cycle` skill; its `SKILL.md` has the launch, doctor, drive and stop commands. The unit tests run in happy-dom and cannot see stacking or CSS.
 
 ### Layout
 
-`apps/web` is the Vite app. Its styled components live in `apps/web/src/components/ui`, copied into the app in the shadcn style rather than kept in a workspace package. `packages/domain` is date maths, period grouping, the predictor and the scoring harness; it has no Foldkit or DOM import, which is what lets the CLI and the app share it.
+`apps/web` is the Vite app. `src/state.ts` owns the model, the draft, the pure reducer, the Effect atoms and storage; `src/app.tsx` wires the atoms and `AppShell` stays presentational; `src/views/` holds the three panels, and the calendar is the whole of Today, with the mode bar above it and the actions under it. `src/domain.ts` is the app's only route into `packages/domain`.
 
-`vitest` runs one root config over `apps/**` and `packages/**`, with the StyleX plugin inlined. StyleX's plugin leaks a 150ms interval into the vitest worker, so the run prints `something prevents 2 Vite servers from exiting` and waits ten seconds before closing. Tests have already passed at that point.
+State is an [Effect Atom](https://effect.website/docs/state-management/atom) (`effect/reactivity` with `@effect/atom-react`): `modelAtom` holds the `Model`, `periodsAtom` derives the periods, and `dispatchAtom` sends an `Action` through the pure reducer and writes the logs once when they change. Edits happen in `model.draft`, and `SavedEditing` is the only action that copies it into `model.logs`. `RegistryProvider` in `src/entry.tsx` owns the registry.
+
+`packages/domain` is date maths, period grouping, the predictor and the scoring harness. It uses Effect internally, has no React or DOM import, and is shared by the CLI and the app.
+
+`vitest` runs one root config over `apps/**` and `packages/**` in happy-dom. Web tests render the real `App` inside `RegistryProvider`, seeding `modelAtom` with a fixed model. React Aria's keyboard movement and the paint gesture belong to the browser check.
 
 ### UI rules
 
-- Components come from `@foldkit/ui`. Do not hand-write a component the library ships. Its submodels (Calendar, Tabs, RadioGroup, Popover, Tooltip, Dialog, Menu) own their own open/closed, active-item and focus state.
-- Stateful components are submodels: put their `Model` in the app `Model`, embed with `h.submodel` (a unique `slotId` per rendered position), and drive them through `Update.foldChild`. Lift their `OutMessage` to app state in `foldOutMessage`; do not mirror their state in app booleans.
-- `apps/web/src/components/ui` is a copy-owned styled layer, not a package. Each module re-exports the headless module and adds a `render`/`renderConfig` that takes the library's `RenderInfo`. Styles never live at the call site; app-level layout is a local StyleX block in `apps/web/src/main.ts`.
-- StyleX needs a `*.stylex.js` file for shared values, and those values must come from `stylex.defineVars`/`defineConsts`. Bare imported scalars are rejected, so write them inline.
-- Read `apps/web/src/components/ui/README.md` before adding a renderer.
-- No radius, no shadow, no animation, no accent colour. Flow is encoded in ink levels, and state is written in words.
-- Mobile first: base styles are the phone, and `@media (min-width: 48rem)` is where a layout relaxes for a wide window. The section nav is a fixed bottom bar on a phone and the inline row above the panel on desktop; both branches are the same DOM. `Tabs.list` owns the row, `styles.nav` in `main.ts` owns the bar.
-- Anything tappable is at least 44px in one dimension (`size.tap`), and labels are one word. The nav is text only; no icons, no pill, no fill.
-- The page reserves the bar's height plus `env(safe-area-inset-bottom)`; the bar reserves the same inset. `viewport-fit=cover` in `index.html` is what makes those insets non-zero.
-- Controls are typed, not filled: a selected tab, flow level or day is full ink plus an underline/border, never a background.
-
-### Foldkit reference
-
-The live Foldkit source is not vendored into this repo. A shallow clone of the matching release lives at `/tmp/references/foldkit` (`foldkit@0.170.0`), alongside `examples/` and `packages/foldkit/src/`. Treat it as read-only reference; imports always come from the `foldkit` npm package. Re-clone it after upgrading Foldkit:
-
-```sh
-git clone --depth 1 --branch "foldkit@$(node -p "require('./node_modules/foldkit/package.json').version")" https://github.com/foldkit/foldkit.git /tmp/references/foldkit
-```
+- Components come from `apps/web/src/components/ui`, shadcn's copy-owned model on the React Aria base (`aria-nova`). React Aria owns the behaviour of Button, Tabs, Dialog, AlertDialog, RadioGroup, Switch, Popover and the calendar; the files own the markup and the classes. Read `apps/web/src/components/ui/README.md` before adding or changing one.
+- React Aria's state markers are `data-selected` and `data-disabled`. The app's own elements keep `data-state`, such as the edit banner's `dirty`/`clean`.
+- Editing is explicit, and the hold is the only way in. Read-only, the calendar takes no write: a tap writes nothing, a swipe keeps the page scrolling, and a hold opens the mode on the held day without writing it. The mode card sits in the status card's slot at the same height, so entering the mode never moves the month: `Editing` / `Unsaved changes` on the left with `Save` and `Cancel` beside it, the flow pen on the second row. In the mode every day is a toggle: a tap flips one day, a drag flips each day it covers.
+- The calendar is React Aria's `Calendar` over `PlainDate`. The paint gesture is a pure machine in `src/gesture.ts`: the component only turns pointer events into its events and runs the effects it returns. The flow marks and the haptics are ours too.
+- Haptics come from `web-haptics` through `src/haptics.ts`, never raw `navigator.vibrate`: `hold` is `heavy`, crossing a day is `selection`, Save is `success`, entering or cancelling is `light`. iOS 26.5+ has no web haptics, so the UI must read without them.
+- Tailwind classes live in the component or view that renders the element. Shared values live in `src/styles.css`.
+- No radius, no shadow, no animation. Flow is the only colour: a full `--color-bleeding` rule, a short `--color-spotting` one. Every other state is words and ink levels.
+- Mobile first: the base styles are the phone and there is one layout at every width. The section nav is a fixed bottom bar everywhere; the column stops widening at `--measure`. Add a `md:` variant only when a phone rule genuinely breaks on a wide window.
+- Anything tappable is at least 44px in one dimension, and the nav labels are one word. The calendar, the nav and the actions under the calendar keep the 44px height. The mode card's `Save`, `Cancel` and flow items are the one exception: 36px tall and well over 44px wide, so the card stays inside the status card's height. The switch keeps its 34×18 track and expands its hit area with a pseudo-element.
+- The page reserves the bar's height plus `env(safe-area-inset-bottom)`, and the bar reserves the same inset. `viewport-fit=cover` in `index.html` is what makes those insets non-zero.
+- Controls are typed, not filled: a selected tab, flow level or day is full ink plus an underline or a 1px border, never a background.
 
 ### Domain vocabulary
 
-- **flow** — a day's bleeding: `Spotting | Bleeding`. Spotting is not bleeding. The three heaviness levels an earlier build stored (`Light | Medium | Heavy`) are folded into `Bleeding` on boot; nothing writes them.
-- **range** — two dates picked in the calendar and filled with the same flow in one save. Stored as one log per day, so nothing downstream knows about ranges.
-- **missed log** — a gap over 1.6× her median once three lengths exist. It is not removed from the logs or the calendar; it is labelled in History and left out of the estimate (`isLikelySkip`). Verified against synthetic merges in `nub run score`.
-- **period** — a run of bleeding days. Derived from day logs, never stored. A bleeding day starts a new period only when there were two clear days before it; trailing spotting within one day extends the end.
+- **flow** — a day's bleeding: `Spotting | Bleeding`. Spotting is not bleeding. The heaviness levels an earlier build stored (`Light | Medium | Heavy`) fold into `Bleeding` on boot; nothing writes them.
+- **range** — two dates painted with the same flow. It lives in the draft and is written as one log per day on Save, so nothing downstream knows about ranges.
+- **missed log** — a gap over 1.6× her median once three lengths exist. It stays in the logs and the calendar; History labels it and the estimate leaves it out (`isLikelySkip`).
+- **period** — a run of bleeding days, derived from day logs, never stored. A bleeding day starts a new period only after two clear days; trailing spotting within one day extends the end.
 - **cycle length** — the gap between two period starts, kept only in 15–90 days.
-- **cycle state** — `NoCycles | Expected | Late | Overdue`. `Overdue` is measured against the _unshifted_ window, so it is reachable while the live window is still sliding forward.
-- **window** — `{ low, high, mostLikely }` date keys. The UI shows the range, never only `mostLikely`.
+- **cycle state** — `NoCycles | Expected | Late | Overdue`. `Overdue` is measured against the unshifted window, so it is reachable while the live window still slides forward.
+- **window** — `{ low, high, mostLikely }` as `PlainDate`s. The UI shows the range, never only `mostLikely`.
 
 ### Rules that are load-bearing
 
-- Dates are `YYYY-MM-DD` strings, and day arithmetic goes through `packages/domain/src/date.ts` in UTC. Never subtract local `Date` objects; that is where the off-by-one days come from.
+- Hold a date as `PlainDate` (`CalendarDate`): a day with no time and no zone. `YYYY-MM-DD` exists only at the storage boundary (`formatPlainDate` / `parsePlainDate` in `packages/domain/src/date.ts`). A JS `Date` carries a zone, so `new Date('2026-11-10')` is the previous day west of UTC.
 - Round the window outward (`floor` the low, `ceil` the high). Never inward.
 - No ovulation, fertile-window, safe-day, or contraception output. Date-only tracking cannot support it.
-- `today` comes from Flags at boot. There is no midnight rollover yet; if you add one, add it as a Command or Subscription, never by calling `Date.now()` while building a Command.
-- Scoring is the regression test for the predictor: `nub run score` prints the table. If a change moves MAE or the ±2 column, say so.
+- `today` is read once in `initModel` with `todayPlainDate()`, which uses the local calendar day. There is no midnight rollover; add one as a timer effect, never by calling `Date.now()` during render. `I18nProvider locale="en-GB"` wraps the app so calendar labels agree with the domain formatters.
+- Scoring is the regression test for the predictor: `pnpm run score` prints the table. If a change moves MAE or the ±2 column, say so.
 
 ### Data
 
-`data/` is gitignored. It holds the Marquette/Fehring cycle data downloaded by `packages/domain/scripts/fetch-dataset.ts`, for local scoring only. Do not commit it, do not redistribute it, do not ship it in the build.
+`data/` is gitignored. It holds the Marquette/Fehring cycle data downloaded by `packages/domain/scripts/fetch-dataset.ts`, for local scoring only. Do not commit it, redistribute it, or ship it in the build.
 
 ### Background
 

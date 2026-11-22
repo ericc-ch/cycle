@@ -1,28 +1,24 @@
 import { fileURLToPath } from 'node:url'
 import { defineConfig, searchForWorkspaceRoot } from 'vite'
 
-import { foldkit } from '@foldkit/vite-plugin'
-import stylex from '@stylexjs/unplugin'
-
-const rootDir = fileURLToPath(new URL('../..', import.meta.url))
+import tailwindcss from '@tailwindcss/vite'
+import react from '@vitejs/plugin-react'
 
 export default defineConfig({
-  plugins: [
-    stylex.vite({
-      useCSSLayers: { before: ['base'] },
-      dev: process.env['NODE_ENV'] !== 'production',
-      runtimeInjection: false,
-      unstable_moduleResolution: { type: 'commonJS', rootDir },
-    }),
-    foldkit(),
-  ],
+  plugins: [react(), tailwindcss()],
   optimizeDeps: {
-    entries: ['src/entry.ts'],
-    exclude: ['@cycle/domain'],
+    entries: ['src/entry.tsx'],
+    exclude: ['@cycle/domain', '@cycle/sync'],
   },
   server: {
-    host: '127.0.0.1',
+    // 0.0.0.0 so a phone can reach it over the LAN or Tailscale. Any host
+    // header is accepted, which is what lets a tailnet name through.
+    host: '0.0.0.0',
     port: 5173,
+    allowedHosts: true,
+    proxy: {
+      '/api': 'http://127.0.0.1:8787',
+    },
     fs: {
       allow: [
         searchForWorkspaceRoot(fileURLToPath(new URL('.', import.meta.url))),

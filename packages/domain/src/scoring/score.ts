@@ -11,20 +11,20 @@ import {
   orderedGroups,
   parseCycleCsv,
   trainingPairs,
-} from './dataset'
+} from './dataset.ts'
 import {
   type Method,
   appPredictor,
   constantPredictor,
   meanPredictor,
   medianPredictor,
-} from './predictors'
+} from './predictors.ts'
 import {
   type LateRow,
   type MetricsRow,
   formatLateTable,
   formatMetricsTable,
-} from './report'
+} from './report.ts'
 
 const DATASET_ARGUMENT_INDEX = 2
 const DEFAULT_DATASET_PATH = 'data/marquette-cycles.csv'
@@ -229,7 +229,7 @@ const main = Effect.gen(function* () {
 
   if (!exists) {
     yield* Console.error(
-      `No dataset at ${datasetPath}.\nRun: nub scripts/fetch-dataset.ts`,
+      `No dataset at ${datasetPath}.\nRun: pnpm run dataset`,
     )
     return
   }

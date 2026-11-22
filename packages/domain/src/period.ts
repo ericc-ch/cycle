@@ -1,11 +1,13 @@
 import { Array, Option, Order, Schema, pipe } from 'effect'
 
 import {
-  type DateKey,
-  dateKeyOrder,
-  formatDayNumber,
-  parseDayNumber,
-} from './date'
+  type PlainDate,
+  PlainDateSchema,
+  dateFromDayNumber,
+  dayNumber,
+  plainDateOrder,
+  sameDay,
+} from './date.ts'
 
 export const Flow = Schema.Literals(['Spotting', 'Bleeding'])
 export type Flow = typeof Flow.Type
@@ -25,14 +27,14 @@ export const flowFromStored = (flow: StoredFlow): Flow =>
   flow === 'Spotting' ? 'Spotting' : 'Bleeding'
 
 export const DayLog = Schema.Struct({
-  date: Schema.String,
+  date: PlainDateSchema,
   flow: Flow,
 })
 export type DayLog = typeof DayLog.Type
 
 export const Period = Schema.Struct({
-  start: Schema.String,
-  end: Schema.String,
+  start: PlainDateSchema,
+  end: PlainDateSchema,
 })
 export type Period = typeof Period.Type
 
@@ -54,10 +56,10 @@ type BleedingDay = { readonly day: number; readonly flow: Flow }
 const bleedingDays = (
   logs: ReadonlyArray<DayLog>,
 ): ReadonlyArray<BleedingDay> => {
-  const parsed = Array.map(logs, log =>
-    Option.map(parseDayNumber(log.date), day => ({ day, flow: log.flow })),
-  )
-  const present: ReadonlyArray<BleedingDay> = Array.getSomes(parsed)
+  const present: ReadonlyArray<BleedingDay> = Array.map(logs, log => ({
+    day: dayNumber(log.date),
+    flow: log.flow,
+  }))
 
   return Array.sort(
     present,
@@ -106,17 +108,14 @@ export const periodsFrom = (
       absorbDay(drafts, day, flow),
     ),
     Array.map(draft => ({
-      start: formatDayNumber(draft.start),
-      end: formatDayNumber(draft.end),
+      start: dateFromDayNumber(draft.start),
+      end: dateFromDayNumber(draft.end),
     })),
   )
 }
 
-export const periodDayCount = (period: Period): Option.Option<number> =>
-  Option.map(
-    Option.all([parseDayNumber(period.start), parseDayNumber(period.end)]),
-    ([start, end]) => end - start + 1,
-  )
+export const periodDayCount = (period: Period): number =>
+  dayNumber(period.end) - dayNumber(period.start) + 1
 
 /** One entry per period: the gap from the previous start, or `None` for the
  *  first. Out-of-range gaps stay in place as `None` so an entry always lines
@@ -124,24 +123,15 @@ export const periodDayCount = (period: Period): Option.Option<number> =>
 export const cycleLengthsByPeriod = (
   periods: ReadonlyArray<Period>,
 ): ReadonlyArray<Option.Option<number>> =>
-  Array.map(periods, (period, index) => {
-    const maybePrevious = Array.get(periods, index - 1)
+  Array.map(periods, (period, index) =>
+    Option.flatMap(Array.get(periods, index - 1), previous => {
+      const length = dayNumber(period.start) - dayNumber(previous.start)
 
-    return Option.flatMap(maybePrevious, previous =>
-      Option.flatMap(
-        Option.all([
-          parseDayNumber(previous.start),
-          parseDayNumber(period.start),
-        ]),
-        ([previousStart, start]) => {
-          const length = start - previousStart
-          return length >= MIN_CYCLE_DAYS && length <= MAX_CYCLE_DAYS
-            ? Option.some(length)
-            : Option.none()
-        },
-      ),
-    )
-  })
+      return length >= MIN_CYCLE_DAYS && length <= MAX_CYCLE_DAYS
+        ? Option.some(length)
+        : Option.none()
+    }),
+  )
 
 export const cycleLengths = (
   periods: ReadonlyArray<Period>,
@@ -152,7 +142,7 @@ export const periodsSorted = (
 ): ReadonlyArray<Period> =>
   Array.sort(
     periods,
-    Order.mapInput(dateKeyOrder, (period: Period) => period.start),
+    Order.mapInput(plainDateOrder, (period: Period) => period.start),
   )
 
 export const latestPeriod = (
@@ -164,14 +154,14 @@ export const logsSorted = (
 ): ReadonlyArray<DayLog> =>
   Array.sort(
     logs,
-    Order.mapInput(dateKeyOrder, (log: DayLog) => log.date),
+    Order.mapInput(plainDateOrder, (log: DayLog) => log.date),
   )
 
 export const flowOn = (
   logs: ReadonlyArray<DayLog>,
-  date: DateKey,
+  date: PlainDate,
 ): Option.Option<Flow> =>
   Option.map(
-    Array.findFirst(logs, log => log.date === date),
+    Array.findFirst(logs, log => sameDay(log.date, date)),
     log => log.flow,
   )

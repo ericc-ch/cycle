@@ -1,0 +1,348 @@
+import {
+  type ChangeEvent,
+  type Dispatch,
+  type FormEvent,
+  useRef,
+  useState,
+} from 'react'
+
+import {
+  CalculatorIcon,
+  CircleHelpIcon,
+  CloudIcon,
+  CloudOffIcon,
+  DownloadIcon,
+  RefreshCwIcon,
+  Trash2Icon,
+  UploadIcon,
+} from 'lucide-react'
+
+import { MIN_PASSPHRASE_LENGTH } from '@cycle/sync'
+
+import {
+  Button,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  Separator,
+  Switch,
+} from '../components/ui'
+import type { Flow } from '../domain'
+import { plural } from '../format'
+import {
+  type Action,
+  type Model,
+  formatStoredLogs,
+  parseStoredLogs,
+} from '../state'
+import { enableSync, loadSyncCredentials, runSync } from '../sync'
+import { FlowMark } from './today'
+
+const LegendRow = ({
+  flow,
+  label,
+}: {
+  readonly flow: Flow
+  readonly label: string
+}) => (
+  <div className="grid grid-cols-[16px_1fr] items-center gap-snug">
+    <span className="flex justify-center">
+      <FlowMark flow={flow} />
+    </span>
+    <span>{label}</span>
+  </div>
+)
+
+const Legend = () => (
+  <Popover>
+    <PopoverTrigger variant="outline">
+      <CircleHelpIcon aria-hidden="true" data-icon="inline-start" />
+      What the marks mean
+    </PopoverTrigger>
+    <PopoverContent>
+      <div className="flex flex-col gap-snug">
+        <LegendRow flow="Bleeding" label="Bleeding" />
+        <LegendRow flow="Spotting" label="Spotting" />
+      </div>
+    </PopoverContent>
+  </Popover>
+)
+
+const INPUT_CLASS =
+  'min-h-11 w-full rounded-md border border-line bg-bg-1 px-base py-snug text-sm text-fg-0 shadow-inset outline-none placeholder:text-fg-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
+
+const SyncSection = ({
+  model,
+  dispatch,
+}: {
+  readonly model: Model
+  readonly dispatch: Dispatch<Action>
+}) => {
+  const [username, setUsername] = useState('')
+  const [passphrase, setPassphrase] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+
+    if (busy) {
+      return
+    }
+
+    setBusy(true)
+    setFormError(null)
+
+    const outcome = await enableSync(username, passphrase, model.vault)
+
+    setBusy(false)
+
+    if (!outcome.ok) {
+      setFormError(outcome.message)
+      return
+    }
+
+    setPassphrase('')
+    dispatch({
+      type: 'SyncEnabled',
+      username: outcome.credentials.username,
+      snapshot: outcome.snapshot,
+    })
+  }
+
+  const onSyncNow = async () => {
+    const credentials = loadSyncCredentials()
+
+    if (credentials === null) {
+      dispatch({ type: 'SyncDisabled' })
+      return
+    }
+
+    dispatch({ type: 'SyncStarted' })
+    const outcome = await runSync(credentials, model.vault)
+
+    if (outcome.ok) {
+      dispatch({
+        type: 'SyncSucceeded',
+        username: credentials.username,
+        snapshot: outcome.snapshot,
+      })
+    } else {
+      dispatch({ type: 'SyncFailed', message: outcome.message })
+    }
+  }
+
+  if (model.sync.status === 'ready') {
+    const statusText =
+      model.sync.activity === 'syncing'
+        ? 'Syncing…'
+        : model.sync.activity === 'error'
+          ? (model.sync.error ?? 'Sync failed.')
+          : 'Synced'
+
+    return (
+      <div className="flex flex-col items-start gap-snug">
+        <div className="flex flex-wrap items-baseline gap-snug text-sm">
+          <span className="font-medium text-fg-0">
+            Sync · {model.sync.username}
+          </span>
+          <span
+            className={
+              model.sync.activity === 'error' ? 'text-danger' : 'text-fg-1'
+            }
+          >
+            {statusText}
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-snug">
+          <Button
+            variant="outline"
+            disabled={model.sync.activity === 'syncing'}
+            onClick={() => void onSyncNow()}
+          >
+            <RefreshCwIcon aria-hidden="true" data-icon="inline-start" />
+            Sync now
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => dispatch({ type: 'SyncDisabled' })}
+          >
+            <CloudOffIcon aria-hidden="true" data-icon="inline-start" />
+            Turn off sync
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <form
+      onSubmit={event => void onSubmit(event)}
+      className="flex flex-col items-start gap-snug"
+    >
+      <div className="flex flex-wrap items-baseline gap-snug text-sm">
+        <span className="font-medium text-fg-0">Sync</span>
+        <span className="text-fg-1">Optional. End-to-end encrypted.</span>
+      </div>
+      <div className="grid w-full grid-cols-1 gap-snug sm:grid-cols-2">
+        <input
+          name="username"
+          type="text"
+          autoComplete="username"
+          placeholder="Username"
+          aria-label="Sync username"
+          required
+          value={username}
+          onChange={event => setUsername(event.target.value)}
+          className={INPUT_CLASS}
+        />
+        <input
+          name="passphrase"
+          type="password"
+          autoComplete="current-password"
+          placeholder="Passphrase (8+ chars)"
+          aria-label="Sync passphrase"
+          minLength={MIN_PASSPHRASE_LENGTH}
+          required
+          value={passphrase}
+          onChange={event => setPassphrase(event.target.value)}
+          className={INPUT_CLASS}
+        />
+      </div>
+      {formError === null ? null : (
+        <p role="alert" className="text-sm text-danger">
+          {formError}
+        </p>
+      )}
+      <Button type="submit" variant="outline" disabled={busy}>
+        <CloudIcon aria-hidden="true" data-icon="inline-start" />
+        {busy ? 'Connecting…' : 'Turn on sync'}
+      </Button>
+    </form>
+  )
+}
+
+export const AboutView = ({
+  model,
+  dispatch,
+}: {
+  readonly model: Model
+  readonly dispatch: Dispatch<Action>
+}) => {
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  const onExport = () => {
+    const blob = new Blob([formatStoredLogs(model.logs)], {
+      type: 'application/json',
+    })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'cycle-logs.json'
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  const onImportFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+
+    if (file === undefined) {
+      return
+    }
+
+    try {
+      const text = await file.text()
+      const logs = parseStoredLogs(JSON.parse(text))
+      dispatch({ type: 'ImportedLogs', logs })
+    } catch {}
+  }
+
+  return (
+    <div className="flex flex-col gap-base">
+      <div className="inline-flex items-center gap-snug">
+        <Switch
+          id="prediction"
+          isSelected={model.isPredicting}
+          onChange={isPredicting =>
+            dispatch({ type: 'SetPrediction', isPredicting })
+          }
+        />
+        <label
+          htmlFor="prediction"
+          data-slot="switch-label"
+          className="cursor-pointer"
+        >
+          Prediction
+        </label>
+        <span className="text-sm text-fg-1">
+          {model.isPredicting ? 'on' : 'off'}
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-snug text-fg-1">
+        <p>
+          Everything stays on this device unless you turn on sync. No analytics.
+        </p>
+        <p>
+          Predictions are a <span className="text-fg-0">range</span>, not a
+          single date. Not for ovulation, fertility, or contraception.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-snug">
+        <Legend />
+
+        <Button
+          variant="outline"
+          onClick={() => dispatch({ type: 'OpenedDialog', dialog: 'about' })}
+        >
+          <CalculatorIcon aria-hidden="true" data-icon="inline-start" />
+          How the range is calculated
+        </Button>
+      </div>
+
+      <Separator />
+
+      <SyncSection model={model} dispatch={dispatch} />
+
+      <Separator />
+
+      <div className="flex flex-col items-start gap-snug">
+        <p className="text-sm text-fg-1">
+          {plural(model.logs.length, 'day', 'days')} logged.
+        </p>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json,application/json"
+          aria-label="Import data file"
+          className="hidden"
+          onChange={onImportFile}
+        />
+        <div className="flex flex-wrap items-center gap-snug">
+          <Button variant="outline" onClick={onExport}>
+            <DownloadIcon aria-hidden="true" data-icon="inline-start" />
+            Export data
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <UploadIcon aria-hidden="true" data-icon="inline-start" />
+            Import data
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={() => dispatch({ type: 'OpenedDialog', dialog: 'clear' })}
+          >
+            <Trash2Icon aria-hidden="true" data-icon="inline-start" />
+            Clear all data
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
