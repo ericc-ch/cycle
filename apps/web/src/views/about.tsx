@@ -12,6 +12,8 @@ import {
   CloudIcon,
   CloudOffIcon,
   DownloadIcon,
+  EyeIcon,
+  EyeOffIcon,
   RefreshCwIcon,
   Trash2Icon,
   UploadIcon,
@@ -19,6 +21,7 @@ import {
 
 import { MIN_PASSPHRASE_LENGTH } from '@cycle/sync'
 
+import { BrandMark } from '../components/brand-mark'
 import {
   Button,
   Popover,
@@ -80,6 +83,7 @@ const SyncSection = ({
 }) => {
   const [username, setUsername] = useState('')
   const [passphrase, setPassphrase] = useState('')
+  const [showPassphrase, setShowPassphrase] = useState(false)
   const [busy, setBusy] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
@@ -196,18 +200,32 @@ const SyncSection = ({
           onChange={event => setUsername(event.target.value)}
           className={INPUT_CLASS}
         />
-        <input
-          name="passphrase"
-          type="password"
-          autoComplete="current-password"
-          placeholder="Passphrase (8+ chars)"
-          aria-label="Sync passphrase"
-          minLength={MIN_PASSPHRASE_LENGTH}
-          required
-          value={passphrase}
-          onChange={event => setPassphrase(event.target.value)}
-          className={INPUT_CLASS}
-        />
+        <div className="relative flex items-center">
+          <input
+            name="passphrase"
+            type={showPassphrase ? 'text' : 'password'}
+            autoComplete="current-password"
+            placeholder="Passphrase (8+ chars)"
+            aria-label="Sync passphrase"
+            minLength={MIN_PASSPHRASE_LENGTH}
+            required
+            value={passphrase}
+            onChange={event => setPassphrase(event.target.value)}
+            className={`${INPUT_CLASS} pe-11`}
+          />
+          <button
+            type="button"
+            aria-label={showPassphrase ? 'Hide passphrase' : 'Show passphrase'}
+            onClick={() => setShowPassphrase(current => !current)}
+            className="absolute end-0 inline-flex size-11 cursor-pointer items-center justify-center rounded-md text-fg-1 outline-none hover:text-fg-0 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ring"
+          >
+            {showPassphrase ? (
+              <EyeOffIcon aria-hidden="true" className="size-4" />
+            ) : (
+              <EyeIcon aria-hidden="true" className="size-4" />
+            )}
+          </button>
+        </div>
       </div>
       {formError === null ? null : (
         <p role="alert" className="text-sm text-danger">
@@ -262,6 +280,14 @@ export const AboutView = ({
 
   return (
     <div className="flex flex-col gap-base">
+      <header className="flex items-center gap-snug">
+        <BrandMark className="size-8" />
+        <div>
+          <p className="font-semibold text-fg-0">Cycle</p>
+          <p className="text-sm text-fg-1">Private period tracking</p>
+        </div>
+      </header>
+
       <div className="inline-flex items-center gap-snug">
         <Switch
           id="prediction"

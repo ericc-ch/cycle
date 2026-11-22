@@ -1,7 +1,10 @@
 import {
+  type DayLog,
   type Period,
   cycleGaps,
+  datesBetween,
   dayNumber,
+  flowAt,
   formatPlainDate,
   isLikelySkip,
   median,
@@ -10,12 +13,54 @@ import {
   withoutLikelySkips,
 } from '../domain'
 import { plural } from '../format'
+import { cn } from '../lib/utils'
 
 type HistoryRow = {
   readonly id: string
+  readonly period: Period
   readonly label: string
   readonly meta: string
   readonly note: string | null
+}
+
+const MAX_RUN_DOTS = 12
+
+/** A period drawn in the app's own mark: a dot per day, spotting in violet
+ *  and an unlogged day in grey. It is decoration; the label and the count
+ *  carry the meaning. */
+const DayRun = ({
+  logs,
+  period,
+}: {
+  readonly logs: ReadonlyArray<DayLog>
+  readonly period: Period
+}) => {
+  const days = datesBetween(period.start, period.end)
+
+  return (
+    <span aria-hidden="true" className="flex items-center gap-0.5 self-center">
+      {days.slice(0, MAX_RUN_DOTS).map(day => {
+        const flow = flowAt(logs, day)
+
+        return (
+          <span
+            key={formatPlainDate(day)}
+            className={cn(
+              'size-1 rounded-full',
+              flow === 'Bleeding' && 'bg-bleeding',
+              flow === 'Spotting' && 'bg-spotting',
+              flow === null && 'bg-fg-2',
+            )}
+          />
+        )
+      })}
+      {days.length > MAX_RUN_DOTS ? (
+        <span className="text-xs leading-none text-fg-2">
+          +{days.length - MAX_RUN_DOTS}
+        </span>
+      ) : null}
+    </span>
+  )
 }
 
 const historyRows = (
@@ -34,6 +79,7 @@ const historyRows = (
 
     rows.push({
       id: formatPlainDate(period.start),
+      period,
       label: `${monthDayLabel(period.start)} – ${monthDayLabel(period.end)}`,
       meta: `${plural(days, 'day', 'days')} · ${
         gap === null ? '—' : `${gap} day cycle`
@@ -46,8 +92,10 @@ const historyRows = (
 }
 
 export const HistoryView = ({
+  logs,
   periods,
 }: {
+  readonly logs: ReadonlyArray<DayLog>
   readonly periods: ReadonlyArray<Period>
 }) => {
   const gaps = cycleGaps(periods)
@@ -73,12 +121,13 @@ export const HistoryView = ({
           {rows.map(row => (
             <li
               key={row.id}
-              className="grid grid-cols-[1fr_auto] items-baseline gap-snug rounded-lg border border-line bg-bg-1 p-base shadow-surface"
+              className="grid grid-cols-[auto_1fr_auto] items-baseline gap-snug rounded-lg border border-line bg-bg-1 p-base shadow-surface"
             >
+              <DayRun logs={logs} period={row.period} />
               <span className="font-medium text-fg-0">{row.label}</span>
               <span className="text-end text-sm text-fg-1">{row.meta}</span>
               {row.note === null ? null : (
-                <span className="col-span-2 text-sm text-fg-1">{row.note}</span>
+                <span className="col-span-3 text-sm text-fg-1">{row.note}</span>
               )}
             </li>
           ))}

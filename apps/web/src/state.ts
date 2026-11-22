@@ -90,6 +90,7 @@ export type Action =
   | { readonly type: 'ClosedDialog' }
   | { readonly type: 'ImportedLogs'; readonly logs: ReadonlyArray<DayLog> }
   | { readonly type: 'ClearedAllLogs' }
+  | { readonly type: 'RefreshedToday'; readonly today: PlainDate }
   | { readonly type: 'SyncStarted' }
   | {
       readonly type: 'SyncEnabled'
@@ -441,6 +442,11 @@ export const reducer = (model: Model, action: Action): Model => {
         dialog: null,
         draft: null,
       }
+
+    case 'RefreshedToday':
+      return sameDay(model.today, action.today)
+        ? model
+        : { ...model, today: action.today }
 
     case 'SyncStarted':
       return model.sync.status === 'ready'

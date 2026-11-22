@@ -1,5 +1,6 @@
 import { type Dispatch, useState } from 'react'
 
+import { BrandMark } from '../components/brand-mark'
 import {
   Button,
   Calendar,
@@ -58,17 +59,20 @@ const TOP_CARD_CLASS =
 /** One card, three lines: the headline, what it means, then the quiet context.
  *  The second and third lines share a size; only the third is muted. */
 const CycleStatusCard = ({
+  mark = false,
   headline,
   headlineClass = 'text-fg-0',
   secondary,
   tertiary,
 }: {
+  readonly mark?: boolean
   readonly headline: string
   readonly headlineClass?: string | undefined
   readonly secondary: string
   readonly tertiary: string
 }) => (
   <div role="status" data-slot="cycle-status" className={TOP_CARD_CLASS}>
+    {mark ? <BrandMark /> : null}
     <p
       className={cn(
         'text-xl leading-snug font-semibold text-pretty',
@@ -95,6 +99,7 @@ const CycleStatus = ({
   if (cycleDay === null || lastPeriod === null) {
     return (
       <CycleStatusCard
+        mark
         headline="Nothing logged"
         secondary="No cycle to predict yet."
         tertiary="Hold a day to start logging."

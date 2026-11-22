@@ -47,7 +47,7 @@ import {
   TabsList,
   TabsTrigger,
 } from './components/ui'
-import type { Period } from './domain'
+import { type Period, todayPlainDate } from './domain'
 import { plural } from './format'
 import {
   type Action,
@@ -119,9 +119,9 @@ const TodayRoute = () => {
 }
 
 const HistoryRoute = () => {
-  const { periods } = useAppState()
+  const { model, periods } = useAppState()
 
-  return <HistoryView periods={periods} />
+  return <HistoryView logs={model.logs} periods={periods} />
 }
 
 const AboutRoute = () => {
@@ -192,10 +192,21 @@ const RootRoute = () => {
   useEffect(() => {
     mountedRef.current = true
 
+    const refreshToday = () => {
+      if (document.visibilityState === 'visible') {
+        dispatch({ type: 'RefreshedToday', today: todayPlainDate() })
+      }
+    }
+
+    document.addEventListener('visibilitychange', refreshToday)
+    window.addEventListener('focus', refreshToday)
+
     return () => {
       mountedRef.current = false
+      document.removeEventListener('visibilitychange', refreshToday)
+      window.removeEventListener('focus', refreshToday)
     }
-  }, [])
+  }, [dispatch])
 
   useEffect(() => {
     if (!syncEnabled) {
@@ -348,7 +359,7 @@ export const AppShell = ({
                   />
                 </TabsContent>
                 <TabsContent id="History">
-                  <HistoryView periods={periods} />
+                  <HistoryView logs={model.logs} periods={periods} />
                 </TabsContent>
                 <TabsContent id="About">
                   <AboutView model={model} dispatch={dispatch} />
