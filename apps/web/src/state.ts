@@ -445,7 +445,10 @@ export const reducer = (model: Model, action: Action): Model => {
     }
 
     case 'SyncSucceeded': {
-      if (model.sync.status !== 'ready') {
+      if (
+        model.sync.status !== 'ready' ||
+        model.sync.username !== action.username
+      ) {
         return model
       }
 

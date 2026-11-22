@@ -76,6 +76,8 @@ export type SyncVaultInput = {
   readonly credentials: SyncCredentials
   readonly local: VaultSnapshot
   readonly fetchFn?: typeof fetch
+  readonly maxConflictRetries?: number
+  readonly retryDelayMs?: (attempt: number) => number
 }
 
 const GetVaultResponseJson = Schema.fromJsonString(GetVaultResponseSchema)
@@ -83,6 +85,17 @@ const PutVaultResponseJson = Schema.fromJsonString(PutVaultResponseSchema)
 const ConflictResponseJson = Schema.fromJsonString(ConflictResponseSchema)
 
 const SYNC_TIMEOUT_MS = 15_000
+export const DEFAULT_MAX_CONFLICT_RETRIES = 5
+
+const defaultConflictDelayMs = (attempt: number): number =>
+  Math.min(1000, 50 * 2 ** attempt) + Math.floor(Math.random() * 100)
+
+const waitMs = (ms: number): Effect.Effect<void> =>
+  ms <= 0
+    ? Effect.void
+    : Effect.promise(
+        () => new Promise<void>(resolve => globalThis.setTimeout(resolve, ms)),
+      )
 
 const authHeader = (credentials: SyncCredentials): string =>
   `Bearer ${credentials.vaultId}.${credentials.authToken}`
@@ -182,6 +195,8 @@ export const syncVault = Effect.fn('syncVault')(function* ({
   credentials,
   local,
   fetchFn = globalThis.fetch,
+  maxConflictRetries = DEFAULT_MAX_CONFLICT_RETRIES,
+  retryDelayMs = defaultConflictDelayMs,
 }: SyncVaultInput): Effect.fn.Return<SyncResult, SyncError> {
   const url = syncEndpoint(baseUrl)
   const getResponse = yield* Effect.tryPromise({
@@ -201,7 +216,7 @@ export const syncVault = Effect.fn('syncVault')(function* ({
   }
 
   let remote: VaultSnapshot | null = null
-  let remoteVersion = 0
+  let expectedVersion = 0
 
   if (getResponse.status === 200) {
     const raw = yield* readText(getResponse)
@@ -216,7 +231,7 @@ export const syncVault = Effect.fn('syncVault')(function* ({
     )
 
     remote = yield* decryptSnapshot(credentials, decoded.ciphertext)
-    remoteVersion = decoded.version
+    expectedVersion = decoded.version
   } else if (getResponse.status !== 404) {
     return yield* new SyncNetworkError({
       message: `Sync failed (${getResponse.status}).`,
@@ -224,53 +239,47 @@ export const syncVault = Effect.fn('syncVault')(function* ({
     })
   }
 
-  const merged = remote === null ? local : mergeSnapshots(local, remote)
+  let merged = remote === null ? local : mergeSnapshots(local, remote)
 
   if (remote !== null && sameSnapshot(merged, remote)) {
-    return { snapshot: merged, version: remoteVersion, pushed: false }
+    return { snapshot: merged, version: expectedVersion, pushed: false }
   }
 
-  const ciphertext = yield* encryptSnapshot(credentials, merged)
-  const firstAttempt = yield* putOnce(
-    url,
-    credentials,
-    remoteVersion,
-    ciphertext,
-    fetchFn,
-  )
+  for (let attempt = 0; attempt <= maxConflictRetries; attempt++) {
+    const ciphertext = yield* encryptSnapshot(credentials, merged)
+    const result = yield* putOnce(
+      url,
+      credentials,
+      expectedVersion,
+      ciphertext,
+      fetchFn,
+    )
 
-  if (firstAttempt.ok) {
-    return { snapshot: merged, version: firstAttempt.version, pushed: true }
-  }
+    if (result.ok) {
+      return { snapshot: merged, version: result.version, pushed: true }
+    }
 
-  const latestRemote = yield* decryptSnapshot(
-    credentials,
-    firstAttempt.conflict.ciphertext,
-  )
-  const remerged = mergeSnapshots(merged, latestRemote)
+    const latestRemote = yield* decryptSnapshot(
+      credentials,
+      result.conflict.ciphertext,
+    )
+    merged = mergeSnapshots(merged, latestRemote)
+    expectedVersion = result.conflict.version
 
-  if (sameSnapshot(remerged, latestRemote)) {
-    return {
-      snapshot: remerged,
-      version: firstAttempt.conflict.version,
-      pushed: false,
+    if (sameSnapshot(merged, latestRemote)) {
+      return {
+        snapshot: merged,
+        version: expectedVersion,
+        pushed: false,
+      }
+    }
+
+    if (attempt < maxConflictRetries) {
+      yield* waitMs(retryDelayMs(attempt))
     }
   }
 
-  const retryCiphertext = yield* encryptSnapshot(credentials, remerged)
-  const retryAttempt = yield* putOnce(
-    url,
-    credentials,
-    firstAttempt.conflict.version,
-    retryCiphertext,
-    fetchFn,
-  )
-
-  if (retryAttempt.ok) {
-    return { snapshot: remerged, version: retryAttempt.version, pushed: true }
-  }
-
   return yield* new SyncConflictError({
-    message: 'Vault changed on another device. Try again.',
+    message: 'Vault changed on another device. Retrying automatically.',
   })
 })

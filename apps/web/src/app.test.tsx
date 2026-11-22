@@ -549,4 +549,22 @@ describe('sync reducer invariants', () => {
     expect(savedDates).toContain('2026-10-15')
     expect(savedDates).toContain('2026-10-20')
   })
+
+  test('SyncSucceeded from a different username is ignored', () => {
+    const enabled = reducer(baseModel, {
+      type: 'SyncEnabled',
+      username: 'bob',
+      snapshot: baseModel.vault,
+    })
+    const stale = reducer(enabled, {
+      type: 'SyncSucceeded',
+      username: 'alice',
+      snapshot: snapshotFromLogs(
+        [{ date: date('2026-10-25'), flow: 'Bleeding' }],
+        999,
+      ),
+    })
+
+    expect(stale).toBe(enabled)
+  })
 })

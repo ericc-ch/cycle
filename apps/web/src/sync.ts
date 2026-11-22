@@ -40,7 +40,12 @@ export const clearSyncCredentials = (): void => {
 
 export type SyncOutcome =
   | { readonly ok: true; readonly snapshot: VaultSnapshot }
-  | { readonly ok: false; readonly message: string }
+  | {
+      readonly ok: false
+      readonly message: string
+      readonly retryable: boolean
+      readonly silent: boolean
+    }
 
 export const enableSync = async (
   username: string,
@@ -66,7 +71,14 @@ export const enableSync = async (
       return { ok: true as const, credentials, snapshot: synced.snapshot }
     }).pipe(
       Effect.catch(error =>
-        Effect.succeed({ ok: false as const, message: error.message }),
+        Effect.succeed({
+          ok: false as const,
+          message: error.message,
+          retryable:
+            error._tag === 'SyncNetworkError' ||
+            error._tag === 'SyncConflictError',
+          silent: error._tag === 'SyncConflictError',
+        }),
       ),
     ),
   )
@@ -90,7 +102,14 @@ export const runSync = async (
     }).pipe(
       Effect.map(res => ({ ok: true as const, snapshot: res.snapshot })),
       Effect.catch(error =>
-        Effect.succeed({ ok: false as const, message: error.message }),
+        Effect.succeed({
+          ok: false as const,
+          message: error.message,
+          retryable:
+            error._tag === 'SyncNetworkError' ||
+            error._tag === 'SyncConflictError',
+          silent: error._tag === 'SyncConflictError',
+        }),
       ),
     ),
   )

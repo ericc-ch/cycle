@@ -130,12 +130,21 @@ const RootRoute = () => {
   const mountedRef = useRef(true)
   const syncingRef = useRef(false)
   const pendingRef = useRef(false)
+  const retryTimerRef = useRef<number | null>(null)
+  const retryAttemptRef = useRef(0)
   const lastSyncedVaultRef = useRef<typeof model.vault | null>(null)
   const syncEnabled = model.sync.status === 'ready'
   const isEditing = model.draft !== null
 
   vaultRef.current = model.vault
   editingRef.current = isEditing
+
+  const clearRetryTimer = useCallback(() => {
+    if (retryTimerRef.current !== null) {
+      window.clearTimeout(retryTimerRef.current)
+      retryTimerRef.current = null
+    }
+  }, [])
 
   const triggerSync = useCallback(async () => {
     const credentials = loadSyncCredentials()
@@ -149,6 +158,7 @@ const RootRoute = () => {
       return
     }
 
+    clearRetryTimer()
     syncingRef.current = true
     dispatch({ type: 'SyncStarted' })
 
@@ -156,8 +166,14 @@ const RootRoute = () => {
 
     syncingRef.current = false
 
-    if (mountedRef.current) {
+    const activeCredentials = loadSyncCredentials()
+    const stillSameAccount =
+      activeCredentials !== null &&
+      activeCredentials.vaultId === credentials.vaultId
+
+    if (mountedRef.current && stillSameAccount) {
       if (outcome.ok) {
+        retryAttemptRef.current = 0
         lastSyncedVaultRef.current = outcome.snapshot
         dispatch({
           type: 'SyncSucceeded',
@@ -165,7 +181,19 @@ const RootRoute = () => {
           snapshot: outcome.snapshot,
         })
       } else {
-        dispatch({ type: 'SyncFailed', message: outcome.message })
+        if (!outcome.silent) {
+          dispatch({ type: 'SyncFailed', message: outcome.message })
+        }
+
+        if (outcome.retryable && !pendingRef.current) {
+          const baseMs = Math.min(30_000, 1000 * 2 ** retryAttemptRef.current)
+          const jitterMs = Math.floor(Math.random() * 500)
+          retryAttemptRef.current = Math.min(retryAttemptRef.current + 1, 5)
+          retryTimerRef.current = window.setTimeout(() => {
+            retryTimerRef.current = null
+            void triggerSync()
+          }, baseMs + jitterMs)
+        }
       }
     }
 
@@ -176,7 +204,7 @@ const RootRoute = () => {
         void triggerSync()
       }
     }
-  }, [dispatch])
+  }, [clearRetryTimer, dispatch])
 
   useEffect(() => {
     mountedRef.current = true
@@ -199,6 +227,8 @@ const RootRoute = () => {
 
   useEffect(() => {
     if (!syncEnabled) {
+      clearRetryTimer()
+      retryAttemptRef.current = 0
       lastSyncedVaultRef.current = null
       pendingRef.current = false
       return
@@ -215,10 +245,11 @@ const RootRoute = () => {
     window.addEventListener('online', onOnline)
 
     return () => {
+      clearRetryTimer()
       document.removeEventListener('visibilitychange', onWake)
       window.removeEventListener('online', onOnline)
     }
-  }, [syncEnabled, triggerSync])
+  }, [clearRetryTimer, syncEnabled, triggerSync])
 
   useEffect(() => {
     if (!syncEnabled || isEditing) {

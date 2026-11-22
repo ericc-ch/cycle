@@ -308,4 +308,97 @@ describe('syncVault', () => {
       '2026-11-15:Spotting',
     ])
   })
+
+  test('resolves multiple consecutive 409 conflicts automatically without failing', async () => {
+    const creds = await Effect.runPromise(
+      deriveCredentials('alice', 'secret-pass', 10_000),
+    )
+
+    let version = 1
+    let serverSnap = snapshotFromLogs(
+      [{ date: date('2026-11-10'), flow: 'Bleeding' }],
+      100,
+    )
+    let ciphertext = await Effect.runPromise(encryptSnapshot(creds, serverSnap))
+    let remainingConflicts = 3
+    let putCount = 0
+
+    const fetchFn: typeof fetch = async (_input, init) => {
+      if (init?.method === 'GET') {
+        return new Response(JSON.stringify({ version, ciphertext }), {
+          status: 200,
+        })
+      }
+
+      putCount++
+
+      if (remainingConflicts > 0) {
+        remainingConflicts--
+        const concurrentDay = `2026-11-${12 + putCount}`
+        serverSnap = applyLogsDiff(
+          serverSnap,
+          [
+            ...logsFromSnapshot(serverSnap),
+            { date: date(concurrentDay), flow: 'Spotting' },
+          ],
+          200 + putCount,
+        )
+        version++
+        ciphertext = await Effect.runPromise(encryptSnapshot(creds, serverSnap))
+
+        return new Response(JSON.stringify({ version, ciphertext }), {
+          status: 409,
+        })
+      }
+
+      const body = Schema.decodeSync(
+        Schema.fromJsonString(PutVaultRequestSchema),
+      )(String(init?.body))
+
+      if (body.expectedVersion !== version) {
+        return new Response(JSON.stringify({ version, ciphertext }), {
+          status: 409,
+        })
+      }
+
+      version++
+      ciphertext = body.ciphertext
+
+      return new Response(JSON.stringify({ version }), { status: 200 })
+    }
+
+    const localEdit = applyLogsDiff(
+      serverSnap,
+      [
+        { date: date('2026-11-10'), flow: 'Bleeding' },
+        { date: date('2026-11-20'), flow: 'Bleeding' },
+      ],
+      150,
+    )
+
+    const resolved = await Effect.runPromise(
+      syncVault({
+        baseUrl: 'https://cycle.ericc.ch',
+        credentials: creds,
+        local: localEdit,
+        fetchFn,
+        retryDelayMs: () => 0,
+      }),
+    )
+
+    expect(putCount).toBe(4)
+    expect(resolved.pushed).toBe(true)
+    expect(resolved.version).toBe(5)
+    expect(
+      logsFromSnapshot(resolved.snapshot).map(
+        log => `${log.date.toString()}:${log.flow}`,
+      ),
+    ).toEqual([
+      '2026-11-10:Bleeding',
+      '2026-11-13:Spotting',
+      '2026-11-14:Spotting',
+      '2026-11-15:Spotting',
+      '2026-11-20:Bleeding',
+    ])
+  })
 })
